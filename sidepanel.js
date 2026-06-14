@@ -1302,7 +1302,7 @@ async function renderCollectionDetails() {
         if (chrome.runtime && chrome.runtime.id) {
           faviconSrc = `chrome-extension://${chrome.runtime.id}/_favicon/?pageUrl=${encodeURIComponent(item.url)}&size=32`;
         } else {
-          faviconSrc = `https://www.google.com/s2/favicons?sz=64&domain=${domain}`;
+          faviconSrc = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
         }
 
         const fallbackChar = domain ? domain[0].toUpperCase() : 'W';
@@ -1321,9 +1321,10 @@ async function renderCollectionDetails() {
               <span>${fallbackChar}</span>
             </div>
           </div>
-          <img class="item-favicon" src="${faviconSrc}" alt="" 
-            onerror="this.src='https://www.google.com/s2/favicons?sz=64&domain=${domain}'; this.onerror=function(){ this.style.display='none'; this.nextElementSibling.style.display='inline-flex'; }" />
-          <div class="item-favicon-fallback" style="display:none; width:16px; height:16px; align-items:center; justify-content:center; background:var(--primary-light); color:var(--primary-color); border-radius:2px; font-size:10px; font-weight:bold; margin-top:3px; flex-shrink:0;">
+          <img class="item-favicon" src="${faviconSrc}" alt="" style="display:none;" 
+            onload="this.style.display='inline-block'; if(this.nextElementSibling) this.nextElementSibling.style.display='none';" 
+            onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='inline-flex';" />
+          <div class="item-favicon-fallback" style="display:inline-flex; width:16px; height:16px; align-items:center; justify-content:center; background:var(--primary-light); color:var(--primary-color); border-radius:2px; font-size:10px; font-weight:bold; margin-top:3px; flex-shrink:0;">
             ${domain ? domain[0].toUpperCase() : 'W'}
           </div>
           <div class="item-details">
@@ -2287,12 +2288,14 @@ function renderSearchResults(matchingCols, groupedItems, allCollections, query) 
           if (chrome.runtime && chrome.runtime.id) {
             faviconSrc = `chrome-extension://${chrome.runtime.id}/_favicon/?pageUrl=${encodeURIComponent(item.url)}&size=32`;
           } else {
-            faviconSrc = `https://www.google.com/s2/favicons?sz=64&domain=${domain}`;
+            faviconSrc = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
           }
           
           card.innerHTML = `
-            <img class="item-favicon" src="${faviconSrc}" alt="" onerror="this.src='https://www.google.com/s2/favicons?sz=64&domain=${domain}'; this.onerror=function(){ this.style.display='none'; this.nextElementSibling.style.display='inline-flex'; }" />
-            <div class="item-favicon-fallback" style="display:none; width:16px; height:16px; align-items:center; justify-content:center; background:var(--primary-light); color:var(--primary-color); border-radius:2px; font-size:10px; font-weight:bold; margin-top:3px; flex-shrink:0;">
+            <img class="item-favicon" src="${faviconSrc}" alt="" style="display:none;" 
+              onload="this.style.display='inline-block'; if(this.nextElementSibling) this.nextElementSibling.style.display='none';" 
+              onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='inline-flex';" />
+            <div class="item-favicon-fallback" style="display:inline-flex; width:16px; height:16px; align-items:center; justify-content:center; background:var(--primary-light); color:var(--primary-color); border-radius:2px; font-size:10px; font-weight:bold; margin-top:3px; flex-shrink:0;">
               ${domain ? domain[0].toUpperCase() : 'W'}
             </div>
             <div class="item-details" style="margin-left: 8px;">

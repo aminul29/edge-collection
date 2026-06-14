@@ -150,7 +150,7 @@
       items.push({
         title: title,
         url: url,
-        favicon: `https://www.google.com/s2/favicons?sz=64&domain=${new URL(url).hostname}`
+        favicon: ""
       });
     });
 
