@@ -1285,3 +1285,164 @@ body {
   color: var(--primary-color) !important;
   transform: scale(1.15);
 }
+
+/* Multi-Select Checkboxes and Actions Bar */
+.item-checkbox-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-right: 8px;
+  flex-shrink: 0;
+}
+
+.item-checkbox {
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--text-tertiary);
+  border-radius: 4px;
+  cursor: pointer;
+  accent-color: var(--primary-color);
+  background-color: var(--surface-color);
+}
+
+/* Float checkboxes in Grid View */
+.items-list.grid-view .item-card .item-checkbox-wrapper,
+.items-list.grid-view .note-card .item-checkbox-wrapper {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 10;
+  background-color: rgba(255, 255, 255, 0.9);
+  border-radius: 4px;
+  padding: 2px 4px;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-color);
+}
+
+@media (prefers-color-scheme: dark) {
+  .items-list.grid-view .item-card .item-checkbox-wrapper,
+  .items-list.grid-view .note-card .item-checkbox-wrapper {
+    background-color: rgba(24, 29, 44, 0.9);
+    border-color: var(--border-color);
+  }
+}
+
+/* Floating Bulk Actions Bar at the bottom */
+.bulk-actions-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background-color: var(--surface-color);
+  border-top: 1px solid var(--border-color);
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.08);
+  padding: 10px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 100;
+  animation: slideUp var(--transition-normal);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.bulk-actions-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.bulk-actions-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.btn-bulk {
+  background-color: var(--bg-color);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-bulk:hover {
+  background-color: var(--surface-hover);
+  border-color: var(--border-hover);
+}
+
+.btn-bulk-danger {
+  background-color: var(--danger-light);
+  border: 1px solid rgba(223, 26, 41, 0.2);
+  color: var(--danger-color);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-bulk-danger:hover {
+  background-color: var(--danger-color);
+  color: #ffffff;
+  border-color: var(--danger-hover);
+}
+
+/* Adjust scrollable space when bulk actions bar is active */
+.main-content.with-bulk-bar {
+  padding-bottom: 56px;
+}
+
+/* Move Modal List styling */
+.move-collections-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.move-collection-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background-color: var(--bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.move-collection-item:hover {
+  background-color: var(--surface-hover);
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}
+
+.move-collection-item svg {
+  fill: currentColor;
+}
+
+/* Highlight select buttons when active */
+#select-items-btn.active {
+  background-color: var(--primary-light) !important;
+  color: var(--primary-color) !important;
+  border-color: var(--primary-color) !important;
+}

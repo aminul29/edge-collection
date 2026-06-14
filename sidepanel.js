@@ -10,6 +10,9 @@ let draggedItemId = null;
 let draggedType = null; // 'collection' or 'item'
 let backDragTimeout = null;
 
+let selectionModeActive = false;
+let selectedItemIds = new Set();
+
 const DB_NAME = 'CollectionsDB';
 const DB_VERSION = 1;
 
@@ -501,6 +504,36 @@ function setupEventListeners() {
     toggleViewBtn.addEventListener('click', handleToggleView);
   }
   
+  const selectItemsBtn = document.getElementById('select-items-btn');
+  if (selectItemsBtn) {
+    selectItemsBtn.addEventListener('click', handleToggleSelectionMode);
+  }
+  
+  const selectAllBtn = document.getElementById('select-all-btn');
+  if (selectAllBtn) {
+    selectAllBtn.addEventListener('click', handleSelectAll);
+  }
+  
+  // Bulk Actions
+  const bulkOpenBtn = document.getElementById('bulk-open-btn');
+  if (bulkOpenBtn) bulkOpenBtn.addEventListener('click', handleBulkOpen);
+  
+  const bulkCopyBtn = document.getElementById('bulk-copy-btn');
+  if (bulkCopyBtn) bulkCopyBtn.addEventListener('click', handleBulkCopy);
+  
+  const bulkMoveBtn = document.getElementById('bulk-move-btn');
+  if (bulkMoveBtn) bulkMoveBtn.addEventListener('click', handleBulkMove);
+  
+  const bulkDeleteBtn = document.getElementById('bulk-delete-btn');
+  if (bulkDeleteBtn) bulkDeleteBtn.addEventListener('click', handleBulkDelete);
+  
+  const closeMoveModalBtn = document.getElementById('close-move-modal-btn');
+  if (closeMoveModalBtn) {
+    closeMoveModalBtn.addEventListener('click', () => {
+      document.getElementById('move-modal').classList.add('hidden');
+    });
+  }
+  
   const createBtn = document.getElementById('create-collection-btn');
   const emptyCreateBtn = document.getElementById('empty-state-create-btn');
   
@@ -694,6 +727,15 @@ function setView(view, collectionId = null) {
   currentView = view;
   activeCollectionId = collectionId;
   
+  // Reset selection states
+  selectionModeActive = false;
+  selectedItemIds.clear();
+  const selectItemsBtn = document.getElementById('select-items-btn');
+  if (selectItemsBtn) selectItemsBtn.classList.remove('active');
+  const selectAllBtn = document.getElementById('select-all-btn');
+  if (selectAllBtn) selectAllBtn.classList.add('hidden');
+  updateBulkActionsBar();
+
   const backBtn = document.getElementById('back-button');
   const viewTitle = document.getElementById('view-title');
   const masterPanel = document.getElementById('collections-list-view');
@@ -865,6 +907,30 @@ async function renderCollectionDetails() {
   const pref = localStorage.getItem('collections_view_pref') || 'list';
   updateViewPrefUI(pref);
   
+  // Update select buttons visibility
+  const selectItemsBtn = document.getElementById('select-items-btn');
+  const selectAllBtn = document.getElementById('select-all-btn');
+  
+  if (selectItemsBtn) {
+    if (selectionModeActive) {
+      selectItemsBtn.classList.add('active');
+      selectItemsBtn.title = "Cancel Selection";
+      if (selectAllBtn) {
+        selectAllBtn.classList.remove('hidden');
+        // Check if all items are selected
+        const allItemIds = activeCollectionItems.map(item => item.id);
+        const allSelected = allItemIds.length > 0 && allItemIds.every(id => selectedItemIds.has(id));
+        selectAllBtn.textContent = allSelected ? "Deselect All" : "Select All";
+      }
+    } else {
+      selectItemsBtn.classList.remove('active');
+      selectItemsBtn.title = "Select Items";
+      if (selectAllBtn) selectAllBtn.classList.add('hidden');
+    }
+  }
+  
+  updateBulkActionsBar();
+  
   try {
     // Refresh collection metadata (for name/rename sync)
     const collections = await DBService.getAllCollections();
@@ -911,8 +977,15 @@ async function renderCollectionDetails() {
         card.className = `note-card note-${item.color || 'yellow'}`;
         card.dataset.id = item.id;
         
+        const checkboxHTML = selectionModeActive ? `
+          <div class="item-checkbox-wrapper">
+            <input type="checkbox" class="item-checkbox" data-id="${item.id}" ${selectedItemIds.has(item.id) ? 'checked' : ''} />
+          </div>
+        ` : '';
+
         card.innerHTML = `
-          <div class="note-content" contenteditable="true" placeholder="Write a note...">${escapeHTML(item.content)}</div>
+          ${checkboxHTML}
+          <div class="note-content" contenteditable="${selectionModeActive ? 'false' : 'true'}" placeholder="Write a note...">${escapeHTML(item.content)}</div>
           <div class="note-footer">
             <div class="note-color-picker">
               <div class="color-dot dot-yellow ${item.color === 'yellow' || !item.color ? 'active' : ''}" data-color="yellow" title="Yellow"></div>
@@ -930,6 +1003,27 @@ async function renderCollectionDetails() {
         `;
         
         const contentEl = card.querySelector('.note-content');
+        
+        // Selection mode card click toggle
+        card.addEventListener('click', (e) => {
+          if (selectionModeActive) {
+            e.preventDefault();
+            e.stopPropagation();
+            const checkbox = card.querySelector('.item-checkbox');
+            if (checkbox) {
+              checkbox.checked = !checkbox.checked;
+              toggleItemSelection(item.id, checkbox.checked);
+            }
+          }
+        });
+        
+        const checkboxEl = card.querySelector('.item-checkbox');
+        if (checkboxEl) {
+          checkboxEl.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleItemSelection(item.id, checkboxEl.checked);
+          });
+        }
         
         // Auto-save on blur
         contentEl.addEventListener('blur', async () => {
@@ -1036,7 +1130,14 @@ async function renderCollectionDetails() {
 
         const fallbackChar = domain ? domain[0].toUpperCase() : 'W';
 
+        const checkboxHTML = selectionModeActive ? `
+          <div class="item-checkbox-wrapper">
+            <input type="checkbox" class="item-checkbox" data-id="${item.id}" ${selectedItemIds.has(item.id) ? 'checked' : ''} />
+          </div>
+        ` : '';
+
         card.innerHTML = `
+          ${checkboxHTML}
           <div class="item-thumbnail-container">
             ${item.thumbnail ? `<img class="item-thumbnail" src="${escapeHTML(item.thumbnail)}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />` : ''}
             <div class="thumbnail-fallback" style="${item.thumbnail ? 'display: none;' : ''}">
@@ -1067,6 +1168,16 @@ async function renderCollectionDetails() {
         
         // Let whole item card click open in new tab (except when clicking delete button or text selection)
         card.addEventListener('click', (e) => {
+          if (selectionModeActive) {
+            e.preventDefault();
+            e.stopPropagation();
+            const checkbox = card.querySelector('.item-checkbox');
+            if (checkbox) {
+              checkbox.checked = !checkbox.checked;
+              toggleItemSelection(item.id, checkbox.checked);
+            }
+            return;
+          }
           if (e.target.closest('.delete-item-btn')) return;
           if (window.getSelection().toString()) return; // Don't navigate if user is highlight-selecting title text
           
@@ -1077,6 +1188,14 @@ async function renderCollectionDetails() {
             window.open(item.url, '_blank');
           }
         });
+        
+        const checkboxEl = card.querySelector('.item-checkbox');
+        if (checkboxEl) {
+          checkboxEl.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleItemSelection(item.id, checkboxEl.checked);
+          });
+        }
         
         // Delete listener
         card.querySelector('.delete-item-btn').addEventListener('click', async (e) => {
@@ -1794,6 +1913,201 @@ function updateViewPrefUI(pref) {
     icon.innerHTML = '<path d="M4 11h5V5H4v6zm0 7h5v-6H4v6zm6 0h5v-6h-5v6zm6 0h5v-6h-5v6zm-6-7h5V5h-5v6zm6-6v6h5V5h-5z"/>';
     icon.parentElement.title = "Switch to Grid View";
   }
+}
+
+// --- Multi-Select & Bulk Actions Handlers ---
+function handleToggleSelectionMode() {
+  if (currentView !== 'detail') return;
+  selectionModeActive = !selectionModeActive;
+  selectedItemIds.clear();
+  render();
+}
+
+function handleSelectAll() {
+  if (currentView !== 'detail') return;
+  const allItemIds = activeCollectionItems.map(item => item.id);
+  const allSelected = allItemIds.length > 0 && allItemIds.every(id => selectedItemIds.has(id));
+  
+  if (allSelected) {
+    selectedItemIds.clear();
+  } else {
+    allItemIds.forEach(id => selectedItemIds.add(id));
+  }
+  render();
+}
+
+function toggleItemSelection(id, isSelected) {
+  if (isSelected) {
+    selectedItemIds.add(id);
+  } else {
+    selectedItemIds.delete(id);
+  }
+  
+  const selectAllBtn = document.getElementById('select-all-btn');
+  if (selectAllBtn) {
+    const allItemIds = activeCollectionItems.map(item => item.id);
+    const allSelected = allItemIds.length > 0 && allItemIds.every(id => selectedItemIds.has(id));
+    selectAllBtn.textContent = allSelected ? "Deselect All" : "Select All";
+  }
+  
+  updateBulkActionsBar();
+}
+
+function updateBulkActionsBar() {
+  const bar = document.getElementById('bulk-actions-bar');
+  const mainContent = document.querySelector('.main-content');
+  const countSpan = document.getElementById('selected-count');
+  
+  if (!bar) return;
+  
+  if (selectionModeActive && currentView === 'detail') {
+    bar.classList.remove('hidden');
+    if (mainContent) mainContent.classList.add('with-bulk-bar');
+    if (countSpan) {
+      const size = selectedItemIds.size;
+      countSpan.textContent = `${size} ${size === 1 ? 'item' : 'items'} selected`;
+    }
+  } else {
+    bar.classList.add('hidden');
+    if (mainContent) mainContent.classList.remove('with-bulk-bar');
+  }
+}
+
+function handleBulkOpen() {
+  if (selectedItemIds.size === 0) return;
+  
+  let openedCount = 0;
+  selectedItemIds.forEach(id => {
+    const item = activeCollectionItems.find(i => i.id === id);
+    if (item && item.type !== 'note' && item.url) {
+      openedCount++;
+      if (chrome.tabs && chrome.tabs.create) {
+        chrome.tabs.create({ url: item.url });
+      } else {
+        window.open(item.url, '_blank');
+      }
+    }
+  });
+  
+  showToast(`Opened ${openedCount} ${openedCount === 1 ? 'tab' : 'tabs'}`);
+  
+  selectionModeActive = false;
+  selectedItemIds.clear();
+  render();
+}
+
+async function handleBulkCopy() {
+  if (selectedItemIds.size === 0) return;
+  
+  const lines = [];
+  selectedItemIds.forEach(id => {
+    const item = activeCollectionItems.find(i => i.id === id);
+    if (item) {
+      if (item.type === 'note') {
+        lines.push(item.content || "");
+      } else {
+        lines.push(`[${item.title || "Untitled"}](${item.url})`);
+      }
+    }
+  });
+  
+  const textToCopy = lines.join('\n');
+  try {
+    await navigator.clipboard.writeText(textToCopy);
+    showToast(`Copied ${selectedItemIds.size} items to clipboard!`);
+  } catch (err) {
+    console.error("Clipboard write failed:", err);
+    showToast("Failed to copy items.");
+  }
+  
+  selectionModeActive = false;
+  selectedItemIds.clear();
+  render();
+}
+
+async function handleBulkDelete() {
+  const size = selectedItemIds.size;
+  if (size === 0) return;
+  
+  if (confirm(`Are you sure you want to delete the ${size} selected items?`)) {
+    try {
+      const transaction = db.transaction(['items'], 'readwrite');
+      const store = transaction.objectStore('items');
+      
+      selectedItemIds.forEach(id => {
+        store.delete(id);
+      });
+      
+      showToast(`Deleted ${size} items`);
+      
+      selectionModeActive = false;
+      selectedItemIds.clear();
+      render();
+    } catch (err) {
+      console.error("Bulk delete error:", err);
+      showToast("Failed to delete items.");
+    }
+  }
+}
+
+async function handleBulkMove() {
+  if (selectedItemIds.size === 0) return;
+  
+  const collections = await DBService.getAllCollections();
+  const otherCollections = collections.filter(c => c.id !== activeCollectionId);
+  
+  const moveListContainer = document.getElementById('move-collections-list');
+  if (!moveListContainer) return;
+  
+  moveListContainer.innerHTML = '';
+  
+  if (otherCollections.length === 0) {
+    moveListContainer.innerHTML = '<p style="font-size:12px; color:var(--text-secondary); text-align:center; padding:10px 0;">No other collections found. Create a new collection first.</p>';
+  } else {
+    otherCollections.forEach(col => {
+      const itemEl = document.createElement('div');
+      itemEl.className = 'move-collection-item';
+      itemEl.innerHTML = `
+        <svg viewBox="0 0 24 24" width="16" height="16">
+          <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
+        </svg>
+        <span>${escapeHTML(col.name)}</span>
+      `;
+      itemEl.addEventListener('click', async () => {
+        try {
+          const transaction = db.transaction(['items'], 'readwrite');
+          const store = transaction.objectStore('items');
+          
+          for (const id of selectedItemIds) {
+            const item = await new Promise((res, rej) => {
+              const req = store.get(id);
+              req.onsuccess = () => res(req.result);
+              req.onerror = () => rej(req.error);
+            });
+            
+            if (item) {
+              item.collectionId = col.id;
+              delete item.sortOrder;
+              store.put(item);
+            }
+          }
+          
+          showToast(`Moved ${selectedItemIds.size} items to "${col.name}"`);
+          document.getElementById('move-modal').classList.add('hidden');
+          
+          selectionModeActive = false;
+          selectedItemIds.clear();
+          render();
+        } catch (err) {
+          console.error("Bulk move error:", err);
+          showToast("Failed to move items.");
+        }
+      });
+      moveListContainer.appendChild(itemEl);
+    });
+  }
+  
+  document.getElementById('move-modal').classList.remove('hidden');
 }
 
 // --- Helper Functions ---
