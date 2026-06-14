@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Edge Collections Sidebar</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-left">
+        <button id="back-button" class="icon-button hidden" aria-label="Go back to collections">
+          <svg class="icon" viewBox="0 0 24 24" width="20" height="20">
+            <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
+          </svg>
+        </button>
+        <h1 id="view-title" class="header-title">Collections</h1>
+      </div>
+      <div class="header-right" style="position: relative;">
+        <!-- Hidden input for file upload (accepts .json or .html backups) -->
+        <input type="file" id="backup-file-input" style="display: none;" accept=".json,.html">
+        <button id="menu-trigger-btn" class="icon-button" title="More Actions" aria-label="More Actions">
+          <svg class="icon" viewBox="0 0 24 24" width="20" height="20">
+            <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2.1.9-2.1 2 .9 2 2.1 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+          </svg>
+        </button>
+        <!-- Dropdown Menu -->
+        <div id="more-actions-menu" class="dropdown-menu hidden">
+          <button id="menu-bing-import" class="dropdown-item" title="Import from Bing Saves">
+            <svg class="icon-dropdown" viewBox="0 0 24 24" width="16" height="16">
+              <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/>
+            </svg>
+            Sync from Bing Saves
+          </button>
+          <button id="menu-paste-import" class="dropdown-item" title="Paste Collection Links">
+            <svg class="icon-dropdown" viewBox="0 0 24 24" width="16" height="16">
+              <path d="M19 2h-4.18C14.4.84 13.3 0 12 0c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm7 18H5V4h2v3h10V4h2v16z"/>
+            </svg>
+            Paste Import
+          </button>
+          <div class="dropdown-divider"></div>
+          <button id="menu-file-import" class="dropdown-item" title="Import Backup JSON/HTML">
+            <svg class="icon-dropdown" viewBox="0 0 24 24" width="16" height="16">
+              <path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z"/>
+            </svg>
+            Import Backup File
+          </button>
+          <button id="menu-file-export" class="dropdown-item" title="Export Backup JSON">
+            <svg class="icon-dropdown" viewBox="0 0 24 24" width="16" height="16">
+              <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/>
+            </svg>
+            Export Backup File
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Toolbar Actions -->
+    <div class="toolbar">
+      <button id="add-current-tab-btn" class="btn btn-primary" title="Add Current Tab to Collection">
+        <svg class="icon-inline" viewBox="0 0 24 24" width="16" height="16">
+          <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+        </svg>
+        Add Tab
+      </button>
+      
+      <button id="create-collection-btn" class="btn btn-secondary" title="Start New Collection">
+        <svg class="icon-inline" viewBox="0 0 24 24" width="16" height="16">
+          <path d="M20 6h-8l-2-2H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-1 8h-3v3h-2v-3h-3v-2h3V9h2v3h3v2z"/>
+        </svg>
+        New Group
+      </button>
+    </div>
+
+    <!-- Inline Collection Creation Form (Hidden by default) -->
+    <div id="inline-creation-form" class="inline-form hidden">
+      <input type="text" id="new-collection-input" placeholder="Enter collection name..." maxlength="50">
+      <div class="form-actions">
+        <button id="save-new-collection-btn" class="btn-icon-confirm" title="Create">
+          <svg class="icon" viewBox="0 0 24 24" width="18" height="18">
+            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+          </svg>
+        </button>
+        <button id="cancel-new-collection-btn" class="btn-icon-cancel" title="Cancel">
+          <svg class="icon" viewBox="0 0 24 24" width="18" height="18">
+            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Search/Filter Area -->
+    <div class="search-container">
+      <svg class="search-icon" viewBox="0 0 24 24" width="16" height="16">
+        <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+      </svg>
+      <input type="text" id="search-input" placeholder="Search collections...">
+    </div>
+
+    <!-- Main Content Panels -->
+    <main class="main-content">
+      <!-- Master View: Collections List -->
+      <section id="collections-list-view" class="view-panel">
+        <div id="collections-container" class="collections-list">
+          <!-- Dynamically populated collections -->
+        </div>
+        
+        <!-- Empty State -->
+        <div id="collections-empty-state" class="empty-state hidden">
+          <div class="empty-icon-wrapper">
+            <svg viewBox="0 0 24 24" width="48" height="48" class="empty-icon">
+              <path d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-2 10H6v-2h12v2zm0-3H6v-2h12v2zm0-3H6V8h12v2z"/>
+            </svg>
+          </div>
+          <h3>Create your first collection</h3>
+          <p>Organize your web pages, projects, and ideas. Add tabs to keep track of important links.</p>
+          <button id="empty-state-create-btn" class="btn btn-primary">Start Collection</button>
+        </div>
+      </section>
+
+      <!-- Detail View: Collection Items List -->
+      <section id="collection-items-view" class="view-panel hidden">
+        <div class="collection-detail-header">
+          <div class="title-edit-container">
+            <h2 id="active-collection-name" class="collection-title">Collection Name</h2>
+            <button id="edit-collection-name-btn" class="icon-button-small" title="Rename Collection">
+              <svg viewBox="0 0 24 24" width="14" height="14">
+                <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+              </svg>
+            </button>
+          </div>
+          <div id="rename-collection-form" class="inline-form rename-form hidden">
+            <input type="text" id="rename-collection-input" maxlength="50">
+            <div class="form-actions">
+              <button id="save-rename-btn" class="btn-icon-confirm">
+                <svg viewBox="0 0 24 24" width="16" height="16">
+                  <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                </svg>
+              </button>
+              <button id="cancel-rename-btn" class="btn-icon-cancel">
+                <svg viewBox="0 0 24 24" width="16" height="16">
+                  <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <button id="delete-collection-btn" class="btn btn-danger-text" title="Delete Collection">
+            <svg class="icon-inline" viewBox="0 0 24 24" width="14" height="14">
+              <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+            </svg>
+            Delete Collection
+          </button>
+        </div>
+
+        <div id="items-container" class="items-list">
+          <!-- Dynamically populated collection items -->
+        </div>
+
+        <!-- Empty Items State -->
+        <div id="items-empty-state" class="empty-state hidden">
+          <div class="empty-icon-wrapper">
+            <svg viewBox="0 0 24 24" width="48" height="48" class="empty-icon">
+              <path d="M19 13H5v-2h14v2z"/>
+            </svg>
+          </div>
+          <h3>This collection is empty</h3>
+          <p>Open any website in Edge and click "Add Current Tab" above to save it here.</p>
+        </div>
+      </section>
+    </main>
+
+    <!-- Notification system for import/save feedback -->
+    <div id="toast-notification" class="toast hidden">
+      <span id="toast-message">Message goes here</span>
+    </div>
+
+    <!-- Clipboard Paste Import Modal -->
+    <div id="clipboard-modal" class="modal-overlay hidden">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h2>Paste Import</h2>
+          <button id="close-clipboard-modal-btn" class="icon-button-small" title="Close">
+            <svg viewBox="0 0 24 24" width="18" height="18">
+              <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-instruction">
+            In Edge Collections &rarr; click three dots (&bull;&bull;&bull;) &rarr; **Copy all** or **Copy items**, then paste (<code>Ctrl+V</code>) below:
+          </p>
+          
+          <div class="form-group">
+            <label for="paste-collection-name">Collection Name</label>
+            <input type="text" id="paste-collection-name" placeholder="Pasted Collection" maxlength="50">
+          </div>
+          
+          <div class="form-group">
+            <label>Pasted Links Content</label>
+            <div id="paste-area" contenteditable="true" placeholder="Click here and paste (Ctrl+V)..."></div>
+          </div>
+          
+          <div class="modal-status">
+            <span id="detected-links-count">No links detected yet</span>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="cancel-clipboard-import-btn" class="btn btn-secondary">Cancel</button>
+          <button id="confirm-clipboard-import-btn" class="btn btn-primary" disabled>Import</button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Bing Saves Import Modal -->
+    <div id="bing-import-modal" class="modal-overlay hidden">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h2>Bing Saves Import</h2>
+          <button id="close-bing-modal-btn" class="icon-button-small" title="Close">
+            <svg viewBox="0 0 24 24" width="18" height="18">
+              <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+            </svg>
+          </button>
+        </div>
+        
+        <!-- Instructional View -->
+        <div id="bing-instructions-view" class="modal-body">
+          <p class="modal-instruction">
+            This tool automatically imports all Collections and saved links from your Microsoft account at <strong>bing.com/saves</strong>.
+          </p>
+          
+          <div id="bing-tab-warning" class="status-banner error">
+            <svg class="icon-inline" viewBox="0 0 24 24" width="16" height="16" style="margin-right: 6px; fill: currentColor;">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+            </svg>
+            <span>Active tab is not on Bing Saves! Please open it to proceed.</span>
+          </div>
+
+          <div id="bing-tab-success" class="status-banner success hidden">
+            <svg class="icon-inline" viewBox="0 0 24 24" width="16" height="16" style="margin-right: 6px; fill: currentColor;">
+              <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+            </svg>
+            <span>Ready! Scraper will inject into your active tab.</span>
+          </div>
+          
+          <div class="banner-actions">
+            <button id="open-bing-saves-btn" class="btn btn-secondary w-full">
+              <svg class="icon-inline" viewBox="0 0 24 24" width="16" height="16">
+                <path d="M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/>
+              </svg>
+              Open Bing Saves Tab
+            </button>
+          </div>
+
+          <p class="modal-note">
+            Note: The scraper will automatically load all items by scrolling, switch between folders, and compile your data. Please keep the Bing Saves tab active while running.
+          </p>
+        </div>
+
+        <!-- Progress View -->
+        <div id="bing-progress-view" class="modal-body hidden">
+          <div class="progress-container">
+            <div class="progress-bar-container">
+              <div id="bing-progress-bar-fill" class="progress-bar-fill" style="width: 0%;"></div>
+            </div>
+            <div class="progress-text-container">
+              <span id="bing-progress-status">Running scraper...</span>
+              <span id="bing-progress-percent">0%</span>
+            </div>
+            <p id="bing-progress-details" class="progress-details">Checking authentication...</p>
+          </div>
+          <div class="loading-spinner-wrapper">
+            <div class="loading-spinner"></div>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="modal-footer">
+          <button id="cancel-bing-import-btn" class="btn btn-secondary">Cancel</button>
+          <button id="start-bing-import-btn" class="btn btn-primary" disabled>Start Import</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Script imports -->
+  <script src="sidepanel.js"></script>
+</body>
+</html>
