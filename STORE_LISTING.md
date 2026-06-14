@@ -70,3 +70,63 @@ We value extension speed and security:
 • No external tracking scripts, CDNs, or network analytics calls.
 • Fully self-contained font styling and graphics for instant loads and zero tracking.
 ```
+
+---
+
+## 3. Privacy & Permissions Submission Form Answers
+*Copy and paste these exact justifications into the Partner Center submission form fields:*
+
+### Single purpose description
+```text
+The single purpose of this extension is to provide a dedicated, docked sidebar where users can save, organize, import, and manage web pages, links, and notes locally in their browser.
+```
+
+### sidePanel justification
+```text
+Required to display the main user interface for managing collections and notes in a docked sidebar alongside the active browsing tab.
+```
+
+### storage justification
+```text
+Required to persist extension preferences and Pro/licensing activation status locally on the user's device.
+```
+
+### tabs justification
+```text
+Required to detect changes in the active tab URL to support the 'Add Current Tab' feature and automatically verify if the user is on the Bing Saves page for migration.
+```
+
+### activeTab justification
+```text
+Required to safely read the URL and Title of the currently active tab when the user clicks 'Add Current Tab' to add it to their collection.
+```
+
+### scripting justification
+```text
+Required to execute the local scraper script (bing_scraper.js) in the context of the user's open bing.com/saves page to import their existing collections.
+```
+
+### Host permission justification
+```text
+https://*.bing.com/* is required to execute the scraping script on the bing.com/saves tab for importing existing collections. https://api.gumroad.com/* is required to communicate with the Gumroad licensing API to validate the user's Pro license key.
+```
+
+### Are you using remote code?
+*Select **No***
+
+### Justification (for Remote Code)
+```text
+No remote code is used. All code, styles, and assets (including fonts and icons) are packaged locally within the extension zip file.
+```
+
+### What user data do you plan to collect...
+*Select **None** (Ensure no data types are selected, as the extension stores everything locally).*
+
+### Privacy policy URL
+```text
+https://aminul29.github.io/edge-collection/privacy.html
+```
+
+### I certify that the following disclosures are true
+*Check **all three** certification checkboxes.*
+
