@@ -972,3 +972,130 @@ body {
   background-color: var(--border-color);
   margin: 6px 0;
 }
+
+/* Sticky Note Cards */
+.note-card {
+  display: flex;
+  flex-direction: column;
+  padding: 12px 14px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  gap: 8px;
+}
+
+.note-card:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.note-content {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  outline: none;
+  word-break: break-word;
+  white-space: pre-wrap;
+  min-height: 40px;
+}
+
+.note-content[placeholder]:empty:before {
+  content: attr(placeholder);
+  opacity: 0.6;
+  pointer-events: none;
+  color: inherit;
+}
+
+/* Note footer bar (shown on hover) */
+.note-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 4px;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.note-card:hover .note-footer {
+  opacity: 1;
+}
+
+.note-color-picker {
+  display: flex;
+  gap: 6px;
+}
+
+.color-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  transition: transform var(--transition-fast);
+}
+
+.color-dot:hover {
+  transform: scale(1.25);
+}
+
+.color-dot.dot-yellow { background-color: #fde68a; color: #78350f; }
+.color-dot.dot-blue   { background-color: #bfdbfe; color: #1e3a8a; }
+.color-dot.dot-green  { background-color: #a7f3d0; color: #065f46; }
+.color-dot.dot-pink   { background-color: #fbcfe8; color: #9d174d; }
+.color-dot.dot-purple { background-color: #e9d5ff; color: #581c87; }
+
+/* Dark mode dots color sync */
+@media (prefers-color-scheme: dark) {
+  .color-dot.dot-yellow { background-color: #fbbf24; color: #fbbf24; }
+  .color-dot.dot-blue   { background-color: #60a5fa; color: #60a5fa; }
+  .color-dot.dot-green  { background-color: #34d399; color: #34d399; }
+  .color-dot.dot-pink   { background-color: #f472b6; color: #f472b6; }
+  .color-dot.dot-purple { background-color: #a78bfa; color: #a78bfa; }
+}
+
+.color-dot.active {
+  box-shadow: 0 0 0 1.5px currentColor;
+}
+
+.note-delete-btn {
+  background: none;
+  border: none;
+  color: inherit;
+  opacity: 0.7;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border-radius: 4px;
+  transition: all var(--transition-fast);
+}
+
+.note-delete-btn:hover {
+  opacity: 1;
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+@media (prefers-color-scheme: dark) {
+  .note-delete-btn:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+  }
+}
+
+/* Note Color Themes (Light Mode) */
+.note-yellow { background-color: #fef3c7; border-color: #fde68a; color: #78350f; }
+.note-blue   { background-color: #dbeafe; border-color: #bfdbfe; color: #1e3a8a; }
+.note-green  { background-color: #d1fae5; border-color: #a7f3d0; color: #065f46; }
+.note-pink   { background-color: #fce7f3; border-color: #fbcfe8; color: #9d174d; }
+.note-purple { background-color: #f3e8ff; border-color: #e9d5ff; color: #581c87; }
+
+/* Note Color Themes (Dark Mode Override) */
+@media (prefers-color-scheme: dark) {
+  .note-yellow { background-color: rgba(245, 158, 11, 0.08); border-color: rgba(245, 158, 11, 0.25); color: #fbbf24; }
+  .note-blue   { background-color: rgba(59, 130, 246, 0.08); border-color: rgba(59, 130, 246, 0.25); color: #60a5fa; }
+  .note-green  { background-color: rgba(16, 185, 129, 0.08); border-color: rgba(16, 185, 129, 0.25); color: #34d399; }
+  .note-pink   { background-color: rgba(236, 72, 153, 0.08); border-color: rgba(236, 72, 153, 0.25); color: #f472b6; }
+  .note-purple { background-color: rgba(139, 92, 246, 0.08); border-color: rgba(139, 92, 246, 0.25); color: #a78bfa; }
+}

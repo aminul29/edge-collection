@@ -177,12 +177,74 @@ const DBService = {
         title: title || "Untitled Page",
         url: url,
         favicon: favicon || "",
+        type: "link",
         created: Date.now()
       };
       
       const request = store.add(item);
       request.onsuccess = () => resolve(item);
       request.onerror = (e) => reject(e.target.error);
+    });
+  },
+
+  addNote(collectionId, content, color) {
+    return new Promise((resolve, reject) => {
+      if (!db) return reject(new Error("Database not initialized"));
+      
+      const transaction = db.transaction(['items'], 'readwrite');
+      const store = transaction.objectStore('items');
+      const item = {
+        id: generateId(),
+        collectionId: collectionId,
+        type: "note",
+        content: content || "",
+        color: color || "yellow",
+        created: Date.now()
+      };
+      
+      const request = store.add(item);
+      request.onsuccess = () => resolve(item);
+      request.onerror = (e) => reject(e.target.error);
+    });
+  },
+
+  updateNoteContent(id, newContent) {
+    return new Promise((resolve, reject) => {
+      if (!db) return reject(new Error("Database not initialized"));
+      
+      const transaction = db.transaction(['items'], 'readwrite');
+      const store = transaction.objectStore('items');
+      
+      const getReq = store.get(id);
+      getReq.onsuccess = () => {
+        const item = getReq.result;
+        if (!item) return reject(new Error("Note not found"));
+        item.content = newContent;
+        const updateReq = store.put(item);
+        updateReq.onsuccess = () => resolve(item);
+        updateReq.onerror = (e) => reject(e.target.error);
+      };
+      getReq.onerror = (e) => reject(e.target.error);
+    });
+  },
+
+  updateNoteColor(id, newColor) {
+    return new Promise((resolve, reject) => {
+      if (!db) return reject(new Error("Database not initialized"));
+      
+      const transaction = db.transaction(['items'], 'readwrite');
+      const store = transaction.objectStore('items');
+      
+      const getReq = store.get(id);
+      getReq.onsuccess = () => {
+        const item = getReq.result;
+        if (!item) return reject(new Error("Note not found"));
+        item.color = newColor;
+        const updateReq = store.put(item);
+        updateReq.onsuccess = () => resolve(item);
+        updateReq.onerror = (e) => reject(e.target.error);
+      };
+      getReq.onerror = (e) => reject(e.target.error);
     });
   },
 
@@ -227,11 +289,20 @@ const DBService = {
           const itemStoreObj = {
             id: generateId() + '_' + index + '_' + itemIndex,
             collectionId: colId,
-            title: item.title || "Untitled",
-            url: item.url,
-            favicon: item.favicon || "",
             created: Date.now() - (group.items.length - itemIndex) * 10 // slightly spacing creation times
           };
+          
+          if (item.type === 'note') {
+            itemStoreObj.type = 'note';
+            itemStoreObj.content = item.content || '';
+            itemStoreObj.color = item.color || 'yellow';
+          } else {
+            itemStoreObj.type = 'link';
+            itemStoreObj.title = item.title || "Untitled";
+            itemStoreObj.url = item.url;
+            itemStoreObj.favicon = item.favicon || "";
+          }
+          
           itemStore.add(itemStoreObj);
           itemsImported++;
         });
@@ -266,11 +337,20 @@ const DBService = {
           if (!itemsMap[item.collectionId]) {
             itemsMap[item.collectionId] = [];
           }
-          itemsMap[item.collectionId].push({
-            title: item.title,
-            url: item.url,
-            favicon: item.favicon || ""
-          });
+          if (item.type === 'note') {
+            itemsMap[item.collectionId].push({
+              type: 'note',
+              content: item.content,
+              color: item.color || 'yellow'
+            });
+          } else {
+            itemsMap[item.collectionId].push({
+              type: 'link',
+              title: item.title,
+              url: item.url,
+              favicon: item.favicon || ""
+            });
+          }
         });
         
         // Build export payload
@@ -307,6 +387,11 @@ function setupEventListeners() {
 
   // Action Bar Buttons
   document.getElementById('add-current-tab-btn').addEventListener('click', handleAddCurrentTab);
+  
+  const addNoteBtn = document.getElementById('add-note-btn');
+  if (addNoteBtn) {
+    addNoteBtn.addEventListener('click', handleAddNote);
+  }
   
   const createBtn = document.getElementById('create-collection-btn');
   const emptyCreateBtn = document.getElementById('empty-state-create-btn');
@@ -507,6 +592,8 @@ function setView(view, collectionId = null) {
   const detailPanel = document.getElementById('collection-items-view');
   const searchInput = document.getElementById('search-input');
   const inlineForm = document.getElementById('inline-creation-form');
+  const addNoteBtn = document.getElementById('add-note-btn');
+  const createCollectionBtn = document.getElementById('create-collection-btn');
   
   inlineForm.classList.add('hidden');
   searchInput.value = '';
@@ -517,11 +604,15 @@ function setView(view, collectionId = null) {
     masterPanel.classList.remove('hidden');
     detailPanel.classList.add('hidden');
     searchInput.placeholder = "Search collections...";
+    if (addNoteBtn) addNoteBtn.classList.add('hidden');
+    if (createCollectionBtn) createCollectionBtn.classList.remove('hidden');
   } else if (view === 'detail') {
     backBtn.classList.remove('hidden');
     masterPanel.classList.add('hidden');
     detailPanel.classList.remove('hidden');
     searchInput.placeholder = "Search items...";
+    if (addNoteBtn) addNoteBtn.classList.remove('hidden');
+    if (createCollectionBtn) createCollectionBtn.classList.add('hidden');
   }
   
   render();
@@ -648,76 +739,154 @@ async function renderCollectionDetails() {
     
     // Apply search filter if active
     const searchVal = document.getElementById('search-input').value.toLowerCase().trim();
-    const filteredItems = activeCollectionItems.filter(item => 
-      item.title.toLowerCase().includes(searchVal) || 
-      item.url.toLowerCase().includes(searchVal)
-    );
+    const filteredItems = activeCollectionItems.filter(item => {
+      if (!searchVal) return true;
+      if (item.type === 'note') {
+        return (item.content || "").toLowerCase().includes(searchVal);
+      } else {
+        return (item.title || "").toLowerCase().includes(searchVal) || 
+               (item.url || "").toLowerCase().includes(searchVal);
+      }
+    });
     
     filteredItems.forEach(item => {
-      const card = document.createElement('div');
-      card.className = 'item-card';
-      card.dataset.id = item.id;
-      
-      const domain = getDomainName(item.url);
-      const formattedDate = new Date(item.created).toLocaleDateString(undefined, { 
-        month: 'short', 
-        day: 'numeric' 
-      });
-      
-      // Safe MV3 favicon retrieval
-      let faviconSrc = "";
-      if (chrome.runtime && chrome.runtime.id) {
-        faviconSrc = `chrome-extension://${chrome.runtime.id}/_favicon/?pageUrl=${encodeURIComponent(item.url)}&size=32`;
-      } else {
-        faviconSrc = `https://www.google.com/s2/favicons?sz=64&domain=${domain}`;
-      }
-
-      card.innerHTML = `
-        <img class="item-favicon" src="${faviconSrc}" alt="" 
-          onerror="this.src='https://www.google.com/s2/favicons?sz=64&domain=${domain}'; this.onerror=function(){ this.style.display='none'; this.nextElementSibling.style.display='inline-flex'; }" />
-        <div class="item-favicon-fallback" style="display:none; width:16px; height:16px; align-items:center; justify-content:center; background:var(--primary-light); color:var(--primary-color); border-radius:2px; font-size:10px; font-weight:bold; margin-top:3px; flex-shrink:0;">
-          ${domain ? domain[0].toUpperCase() : 'W'}
-        </div>
-        <div class="item-details">
-          <a class="item-title" href="${escapeHTML(item.url)}" target="_blank" title="${escapeHTML(item.title)}">${escapeHTML(item.title)}</a>
-          <div class="item-meta">
-            <span class="item-domain">${escapeHTML(domain)}</span>
-            <span>&bull;</span>
-            <span class="item-date">${formattedDate}</span>
-          </div>
-        </div>
-        <div class="item-actions">
-          <button class="icon-button-small delete-item-btn" title="Delete Link" data-id="${item.id}">
-            <svg viewBox="0 0 24 24" width="14" height="14">
-              <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-            </svg>
-          </button>
-        </div>
-      `;
-      
-      // Let whole item card click open in new tab (except when clicking delete button or text selection)
-      card.addEventListener('click', (e) => {
-        if (e.target.closest('.delete-item-btn')) return;
-        if (window.getSelection().toString()) return; // Don't navigate if user is highlight-selecting title text
+      if (item.type === 'note') {
+        const card = document.createElement('div');
+        card.className = `note-card note-${item.color || 'yellow'}`;
+        card.dataset.id = item.id;
         
-        e.preventDefault();
-        if (chrome.tabs) {
-          chrome.tabs.create({ url: item.url });
+        card.innerHTML = `
+          <div class="note-content" contenteditable="true" placeholder="Write a note...">${escapeHTML(item.content)}</div>
+          <div class="note-footer">
+            <div class="note-color-picker">
+              <div class="color-dot dot-yellow ${item.color === 'yellow' || !item.color ? 'active' : ''}" data-color="yellow" title="Yellow"></div>
+              <div class="color-dot dot-blue ${item.color === 'blue' ? 'active' : ''}" data-color="blue" title="Blue"></div>
+              <div class="color-dot dot-green ${item.color === 'green' ? 'active' : ''}" data-color="green" title="Green"></div>
+              <div class="color-dot dot-pink ${item.color === 'pink' ? 'active' : ''}" data-color="pink" title="Pink"></div>
+              <div class="color-dot dot-purple ${item.color === 'purple' ? 'active' : ''}" data-color="purple" title="Purple"></div>
+            </div>
+            <button class="note-delete-btn" title="Delete Note">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+              </svg>
+            </button>
+          </div>
+        `;
+        
+        const contentEl = card.querySelector('.note-content');
+        
+        // Auto-save on blur
+        contentEl.addEventListener('blur', async () => {
+          const newText = contentEl.innerText.trim();
+          if (newText !== item.content) {
+            await DBService.updateNoteContent(item.id, newText);
+            item.content = newText;
+            showToast("Note saved");
+          }
+        });
+        
+        // Keydown handlers
+        contentEl.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape' || (e.key === 'Enter' && e.shiftKey)) {
+            contentEl.blur();
+            e.preventDefault();
+          }
+        });
+        
+        // Color picker handlers
+        const dots = card.querySelectorAll('.color-dot');
+        dots.forEach(dot => {
+          dot.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const newColor = dot.dataset.color;
+            await DBService.updateNoteColor(item.id, newColor);
+            
+            dots.forEach(d => d.classList.remove('active'));
+            dot.classList.add('active');
+            
+            card.className = `note-card note-${newColor}`;
+            item.color = newColor;
+            showToast("Color updated");
+          });
+        });
+        
+        // Delete handler
+        card.querySelector('.note-delete-btn').addEventListener('click', async (e) => {
+          e.stopPropagation();
+          if (confirm("Are you sure you want to delete this note?")) {
+            await DBService.deleteItem(item.id);
+            showToast("Removed note");
+            render();
+          }
+        });
+        
+        container.appendChild(card);
+      } else {
+        const card = document.createElement('div');
+        card.className = 'item-card';
+        card.dataset.id = item.id;
+        
+        const domain = getDomainName(item.url);
+        const formattedDate = new Date(item.created).toLocaleDateString(undefined, { 
+          month: 'short', 
+          day: 'numeric' 
+        });
+        
+        // Safe MV3 favicon retrieval
+        let faviconSrc = "";
+        if (chrome.runtime && chrome.runtime.id) {
+          faviconSrc = `chrome-extension://${chrome.runtime.id}/_favicon/?pageUrl=${encodeURIComponent(item.url)}&size=32`;
         } else {
-          window.open(item.url, '_blank');
+          faviconSrc = `https://www.google.com/s2/favicons?sz=64&domain=${domain}`;
         }
-      });
-      
-      // Delete listener
-      card.querySelector('.delete-item-btn').addEventListener('click', async (e) => {
-        e.stopPropagation();
-        const id = e.currentTarget.dataset.id;
-        await DBService.deleteItem(id);
-        showToast("Removed item");
-        render();
-      });
-      
-      container.appendChild(card);
+
+        card.innerHTML = `
+          <img class="item-favicon" src="${faviconSrc}" alt="" 
+            onerror="this.src='https://www.google.com/s2/favicons?sz=64&domain=${domain}'; this.onerror=function(){ this.style.display='none'; this.nextElementSibling.style.display='inline-flex'; }" />
+          <div class="item-favicon-fallback" style="display:none; width:16px; height:16px; align-items:center; justify-content:center; background:var(--primary-light); color:var(--primary-color); border-radius:2px; font-size:10px; font-weight:bold; margin-top:3px; flex-shrink:0;">
+            ${domain ? domain[0].toUpperCase() : 'W'}
+          </div>
+          <div class="item-details">
+            <a class="item-title" href="${escapeHTML(item.url)}" target="_blank" title="${escapeHTML(item.title)}">${escapeHTML(item.title)}</a>
+            <div class="item-meta">
+              <span class="item-domain">${escapeHTML(domain)}</span>
+              <span>&bull;</span>
+              <span class="item-date">${formattedDate}</span>
+            </div>
+          </div>
+          <div class="item-actions">
+            <button class="icon-button-small delete-item-btn" title="Delete Link" data-id="${item.id}">
+              <svg viewBox="0 0 24 24" width="14" height="14">
+                <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+              </svg>
+            </button>
+          </div>
+        `;
+        
+        // Let whole item card click open in new tab (except when clicking delete button or text selection)
+        card.addEventListener('click', (e) => {
+          if (e.target.closest('.delete-item-btn')) return;
+          if (window.getSelection().toString()) return; // Don't navigate if user is highlight-selecting title text
+          
+          e.preventDefault();
+          if (chrome.tabs) {
+            chrome.tabs.create({ url: item.url });
+          } else {
+            window.open(item.url, '_blank');
+          }
+        });
+        
+        // Delete listener
+        card.querySelector('.delete-item-btn').addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const id = e.currentTarget.dataset.id;
+          await DBService.deleteItem(id);
+          showToast("Removed item");
+          render();
+        });
+        
+        container.appendChild(card);
+      }
     });
   } catch (err) {
     console.error("Render items error:", err);
@@ -725,6 +894,23 @@ async function renderCollectionDetails() {
 }
 
 // --- Action Handlers ---
+
+// Add Note
+async function handleAddNote() {
+  if (!activeCollectionId) return;
+  try {
+    const newNote = await DBService.addNote(activeCollectionId, "", "yellow");
+    await render();
+    // Focus the new note's contenteditable area
+    const noteEl = document.querySelector(`.note-card[data-id="${newNote.id}"] .note-content`);
+    if (noteEl) {
+      noteEl.focus();
+    }
+  } catch (err) {
+    console.error("Add note error:", err);
+    showToast("Failed to add note.");
+  }
+}
 
 // Create Collection
 async function handleCreateCollection() {
@@ -1172,12 +1358,23 @@ function parseBackupFile(fileContent, filename) {
       for (const [colName, items] of Object.entries(data)) {
         if (Array.isArray(items)) {
           const parsedItems = items
-            .filter(item => item && (item.url || item.link))
-            .map(item => ({
-              title: item.title || item.name || item.url || item.link || "Untitled",
-              url: item.url || item.link,
-              favicon: item.favicon || ""
-            }));
+            .filter(item => item && (item.url || item.link || item.type === 'note'))
+            .map(item => {
+              if (item.type === 'note') {
+                return {
+                  type: 'note',
+                  content: item.content || "",
+                  color: item.color || "yellow"
+                };
+              } else {
+                return {
+                  type: 'link',
+                  title: item.title || item.name || item.url || item.link || "Untitled",
+                  url: item.url || item.link,
+                  favicon: item.favicon || ""
+                };
+              }
+            });
           result.push({ name: colName, items: parsedItems });
         }
       }
@@ -1193,12 +1390,23 @@ function parseBackupFile(fileContent, filename) {
           const name = col.name || col.title || "Imported Collection";
           const rawItems = col.items || col.links || [];
           const items = rawItems
-            .filter(item => item && (item.url || item.link))
-            .map(item => ({
-              title: item.title || item.name || item.url || item.link || "Untitled",
-              url: item.url || item.link,
-              favicon: item.favicon || ""
-            }));
+            .filter(item => item && (item.url || item.link || item.type === 'note'))
+            .map(item => {
+              if (item.type === 'note') {
+                return {
+                  type: 'note',
+                  content: item.content || "",
+                  color: item.color || "yellow"
+                };
+              } else {
+                return {
+                  type: 'link',
+                  title: item.title || item.name || item.url || item.link || "Untitled",
+                  url: item.url || item.link,
+                  favicon: item.favicon || ""
+                };
+              }
+            });
           return { name, items };
         });
       } else {
