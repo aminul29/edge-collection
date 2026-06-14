@@ -1680,4 +1680,43 @@ body {
   background-color: var(--surface-color);
 }
 
+/* Paywall validation messages */
+.paywall-success-text {
+  color: var(--success-color, #10b981) !important;
+}
+
+.paywall-error-text {
+  color: var(--danger-color, #df1a29) !important;
+}
+
+/* Global search upgrade promo banner */
+.search-upgrade-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background-color: var(--primary-light);
+  border: 1px dashed var(--col-accent, var(--primary-color));
+  border-radius: var(--radius-md);
+  margin-top: 12px;
+  text-align: center;
+}
+
+.search-upgrade-banner p {
+  font-size: 11px;
+  color: var(--text-primary);
+  line-height: 1.4;
+  font-weight: 600;
+  margin: 0;
+}
+
+.search-upgrade-banner button {
+  align-self: center;
+  font-size: 10px;
+  padding: 4px 10px;
+  height: 24px;
+  min-width: auto;
+}
+
+
 

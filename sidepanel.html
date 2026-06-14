@@ -31,11 +31,11 @@
         </button>
         <!-- Dropdown Menu -->
         <div id="more-actions-menu" class="dropdown-menu hidden">
-          <button id="menu-bing-import" class="dropdown-item" title="Import from Bing Saves">
+          <button id="menu-bing-import" class="dropdown-item" title="Sync from Microsoft Edge Collections">
             <svg class="icon-dropdown" viewBox="0 0 24 24" width="16" height="16">
               <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/>
             </svg>
-            Sync from Bing Saves
+            Sync from Microsoft Edge Collections
           </button>
           <button id="menu-paste-import" class="dropdown-item" title="Paste Collection Links">
             <svg class="icon-dropdown" viewBox="0 0 24 24" width="16" height="16">
@@ -252,7 +252,7 @@
     <div id="bing-import-modal" class="modal-overlay hidden">
       <div class="modal-card">
         <div class="modal-header">
-          <h2>Bing Saves Import</h2>
+          <h2>Sync from Microsoft Edge Collections</h2>
           <button id="close-bing-modal-btn" class="icon-button-small" title="Close">
             <svg viewBox="0 0 24 24" width="18" height="18">
               <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
@@ -263,21 +263,21 @@
         <!-- Instructional View -->
         <div id="bing-instructions-view" class="modal-body">
           <p class="modal-instruction">
-            This tool automatically imports all Collections and saved links from your Microsoft account at <strong>bing.com/saves</strong>.
+            This tool automatically imports all Collections and saved links from your Microsoft account at <strong>bing.com/saves</strong> (Microsoft Edge Collections cloud sync).
           </p>
           
           <div id="bing-tab-warning" class="status-banner error">
             <svg class="icon-inline" viewBox="0 0 24 24" width="16" height="16" style="margin-right: 6px; fill: currentColor;">
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
             </svg>
-            <span>Active tab is not on Bing Saves! Please open it to proceed.</span>
+            <span>Active tab is not on Microsoft Edge Collections! Please open bing.com/saves to proceed.</span>
           </div>
 
           <div id="bing-tab-success" class="status-banner success hidden">
             <svg class="icon-inline" viewBox="0 0 24 24" width="16" height="16" style="margin-right: 6px; fill: currentColor;">
               <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
             </svg>
-            <span>Ready! Scraper will inject into your active tab.</span>
+            <span>Ready! Microsoft Edge Collections sync will begin on your active tab.</span>
           </div>
           
           <div class="banner-actions">
@@ -285,12 +285,12 @@
               <svg class="icon-inline" viewBox="0 0 24 24" width="16" height="16">
                 <path d="M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/>
               </svg>
-              Open Bing Saves Tab
+              Open Edge Collections Sync Page
             </button>
           </div>
 
           <p class="modal-note">
-            Note: The scraper will automatically load all items by scrolling, switch between folders, and compile your data. Please keep the Bing Saves tab active while running.
+            Note: The sync tool will automatically load all items by scrolling, switch between folders, and compile your data. Please keep the bing.com/saves tab active while running.
           </p>
         </div>
 
@@ -316,6 +316,8 @@
           <button id="cancel-bing-import-btn" class="btn btn-secondary">Cancel</button>
           <button id="start-bing-import-btn" class="btn btn-primary" disabled>Start Import</button>
         </div>
+      </div>
+    </div>
     <!-- Floating Bulk Actions Bar (slides up) -->
     <div id="bulk-actions-bar" class="bulk-actions-bar hidden">
       <div class="bulk-actions-count">
@@ -344,6 +346,46 @@
           <p class="modal-instruction" style="margin-bottom: 12px;">Choose target collection:</p>
           <div id="move-collections-list" class="move-collections-list">
             <!-- Dynamically populated target list -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Gumroad Paywall Modal -->
+    <div id="paywall-modal" class="modal-overlay hidden">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h2>Upgrade to Collections Pro</h2>
+          <button id="close-paywall-modal-btn" class="icon-button-small" title="Close">
+            <svg viewBox="0 0 24 24" width="18" height="18">
+              <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body" style="padding-top: 12px; display: flex; flex-direction: column; gap: 12px;">
+          <p class="modal-instruction" style="font-size: 12px; line-height: 1.5; color: var(--text-secondary);">
+            Unlock the full potential of your collections with the <strong>Pro Upgrade</strong>:
+          </p>
+          <ul style="margin-left: 16px; font-size: 11px; line-height: 1.6; color: var(--text-secondary); list-style-type: disc;">
+            <li>Create unlimited collections (Free tier: max 5 folders)</li>
+            <li>Custom color-coded collection groups</li>
+            <li>Global search across all collections &amp; items</li>
+            <li>Sync from Microsoft Edge Collections (bing.com/saves)</li>
+          </ul>
+          
+          <div class="paywall-action-box" style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px;">
+            <a id="buy-pro-btn" href="https://gumroad.com" target="_blank" class="btn btn-primary" style="text-align: center; text-decoration: none; width: 100%; display: flex; align-items: center; justify-content: center; height: 36px; font-weight: 600;">
+              Get Pro License Key ($4.99)
+            </a>
+            
+            <div style="display: flex; flex-direction: column; gap: 4px; margin-top: 6px; border-top: 1px solid var(--border-color); padding-top: 12px;">
+              <label for="license-input" style="font-size: 10px; font-weight: 700; color: var(--text-primary); text-transform: uppercase;">Already purchased? Activate here:</label>
+              <div style="display: flex; gap: 6px;">
+                <input type="text" id="license-input" placeholder="Paste License Key (e.g. 12AB34...)" style="flex: 1; height: 32px; font-size: 11px; padding: 6px 10px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); outline: none;">
+                <button id="activate-pro-btn" class="btn btn-secondary" style="height: 32px; min-width: 80px; font-size: 11px; padding: 0 10px; font-weight: 600;">Activate</button>
+              </div>
+              <div id="paywall-status-message" style="font-size: 10px; font-weight: 600; margin-top: 4px; display: none;"></div>
+            </div>
           </div>
         </div>
       </div>

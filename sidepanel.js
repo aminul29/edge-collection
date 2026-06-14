@@ -13,6 +13,9 @@ let backDragTimeout = null;
 let selectionModeActive = false;
 let selectedItemIds = new Set();
 let preSearchView = null;
+let isProUser = false;
+const GUMROAD_PRODUCT_ID = "OoY9cskAiTFzrZBCDYUDWw==";
+const GUMROAD_PRODUCT_URL = "https://aminulist0.gumroad.com/l/fzkozw";
 
 const DB_NAME = 'CollectionsDB';
 const DB_VERSION = 1;
@@ -485,6 +488,7 @@ async function moveItemToCollection(itemId, targetCollectionId) {
 document.addEventListener('DOMContentLoaded', async () => {
   try {
     await DBService.init();
+    await checkProStatusOnStartup();
     setupEventListeners();
     await render();
   } catch (err) {
@@ -637,6 +641,10 @@ function setupEventListeners() {
   if (menuBingImport) {
     menuBingImport.addEventListener('click', () => {
       dropdownMenu.classList.add('hidden');
+      if (!isProUser) {
+        showPaywallModal();
+        return;
+      }
       handleBingImportButtonClick();
     });
   }
@@ -772,6 +780,40 @@ function setupEventListeners() {
       document.querySelectorAll('.color-picker-popover').forEach(el => el.remove());
     }
   });
+
+  // Gumroad Paywall Modal controls
+  const buyProBtn = document.getElementById('buy-pro-btn');
+  if (buyProBtn) {
+    buyProBtn.href = GUMROAD_PRODUCT_URL;
+  }
+
+  const closePaywallBtn = document.getElementById('close-paywall-modal-btn');
+  if (closePaywallBtn) {
+    closePaywallBtn.addEventListener('click', () => {
+      document.getElementById('paywall-modal').classList.add('hidden');
+    });
+  }
+  
+  const activateProBtn = document.getElementById('activate-pro-btn');
+  if (activateProBtn) {
+    activateProBtn.addEventListener('click', async () => {
+      const input = document.getElementById('license-input');
+      const key = input ? input.value.trim() : '';
+      if (!key) {
+        const statusMsg = document.getElementById('paywall-status-message');
+        if (statusMsg) {
+          statusMsg.className = 'paywall-error-text';
+          statusMsg.style.display = 'block';
+          statusMsg.style.color = 'var(--danger-color)';
+          statusMsg.textContent = 'Please enter a license key.';
+        }
+        return;
+      }
+      activateProBtn.disabled = true;
+      await verifyGumroadLicense(key);
+      activateProBtn.disabled = false;
+    });
+  }
 }
 
 // --- View Router ---
@@ -900,6 +942,11 @@ async function renderCollectionsList() {
       if (changeColorBtn) {
         changeColorBtn.addEventListener('click', (e) => {
           e.stopPropagation();
+          
+          if (!isProUser) {
+            showPaywallModal();
+            return;
+          }
           
           const existingPopover = card.querySelector('.color-picker-popover');
           if (existingPopover) {
@@ -1058,6 +1105,12 @@ async function renderCollectionDetails() {
         btn.title = color.charAt(0).toUpperCase() + color.slice(1);
         btn.addEventListener('click', async (e) => {
           e.stopPropagation();
+          
+          if (!isProUser) {
+            showPaywallModal();
+            return;
+          }
+          
           await DBService.updateCollectionColor(activeCol.id, color);
           showToast(`Theme updated to ${color}`);
           render();
@@ -1405,6 +1458,12 @@ async function handleCreateCollection() {
     return;
   }
   
+  // Paywall check: Limit to 5 collections for free users
+  if (!isProUser && collectionsList.length >= 5) {
+    showPaywallModal();
+    return;
+  }
+
   try {
     const newCol = await DBService.addCollection(name);
     document.getElementById('inline-creation-form').classList.add('hidden');
@@ -2037,28 +2096,50 @@ async function handleSearch(e) {
   
   try {
     const allCollections = await DBService.getAllCollections();
-    const allItems = await DBService.getAllItems();
+    let matchingCols = [];
+    let groupedItems = {};
     
-    // Filter matching collections
-    const matchingCols = allCollections.filter(col => col.name.toLowerCase().includes(query));
-    
-    // Filter matching items
-    const matchingItems = allItems.filter(item => {
-      if (item.type === 'note') {
-        return (item.content || "").toLowerCase().includes(query);
-      } else {
-        return (item.title || "").toLowerCase().includes(query) || (item.url || "").toLowerCase().includes(query);
+    if (isProUser) {
+      const allItems = await DBService.getAllItems();
+      
+      // Filter matching collections
+      matchingCols = allCollections.filter(col => col.name.toLowerCase().includes(query));
+      
+      // Filter matching items
+      const matchingItems = allItems.filter(item => {
+        if (item.type === 'note') {
+          return (item.content || "").toLowerCase().includes(query);
+        } else {
+          return (item.title || "").toLowerCase().includes(query) || (item.url || "").toLowerCase().includes(query);
+        }
+      });
+      
+      // Group matching items by collection
+      matchingItems.forEach(item => {
+        if (!groupedItems[item.collectionId]) {
+          groupedItems[item.collectionId] = [];
+        }
+        groupedItems[item.collectionId].push(item);
+      });
+    } else {
+      // Free tier: limit search to current local view scope
+      if (preSearchView.view === 'master') {
+        matchingCols = allCollections.filter(col => col.name.toLowerCase().includes(query));
+      } else if (preSearchView.view === 'detail' && preSearchView.collectionId) {
+        const localItems = await DBService.getItems(preSearchView.collectionId);
+        const matchingItems = localItems.filter(item => {
+          if (item.type === 'note') {
+            return (item.content || "").toLowerCase().includes(query);
+          } else {
+            return (item.title || "").toLowerCase().includes(query) || (item.url || "").toLowerCase().includes(query);
+          }
+        });
+        
+        if (matchingItems.length > 0) {
+          groupedItems[preSearchView.collectionId] = matchingItems;
+        }
       }
-    });
-    
-    // Group matching items by collection
-    const groupedItems = {};
-    matchingItems.forEach(item => {
-      if (!groupedItems[item.collectionId]) {
-        groupedItems[item.collectionId] = [];
-      }
-      groupedItems[item.collectionId].push(item);
-    });
+    }
     
     renderSearchResults(matchingCols, groupedItems, allCollections, query);
   } catch (err) {
@@ -2087,6 +2168,17 @@ function renderSearchResults(matchingCols, groupedItems, allCollections, query) 
         <p>We couldn't find any collections or items matching "${escapeHTML(query)}".</p>
       </div>
     `;
+    
+    if (!isProUser) {
+      const banner = document.createElement('div');
+      banner.className = 'search-upgrade-banner';
+      banner.innerHTML = `
+        <p>Global search is a Pro feature. Upgrade to search all folders instantly.</p>
+        <button class="btn btn-primary" id="search-upgrade-btn">Upgrade to Pro</button>
+      `;
+      banner.querySelector('#search-upgrade-btn').addEventListener('click', showPaywallModal);
+      container.appendChild(banner);
+    }
     return;
   }
   
@@ -2231,6 +2323,18 @@ function renderSearchResults(matchingCols, groupedItems, allCollections, query) 
     
     itemsSection.appendChild(groupsWrapper);
     container.appendChild(itemsSection);
+  }
+
+  // Append upgrade banner for free users
+  if (!isProUser) {
+    const banner = document.createElement('div');
+    banner.className = 'search-upgrade-banner';
+    banner.innerHTML = `
+      <p>Global search is a Pro feature. Upgrade to search all folders instantly.</p>
+      <button class="btn btn-primary" id="search-upgrade-btn">Upgrade to Pro</button>
+    `;
+    banner.querySelector('#search-upgrade-btn').addEventListener('click', showPaywallModal);
+    container.appendChild(banner);
   }
 }
 
@@ -2460,6 +2564,101 @@ async function handleBulkMove() {
   document.getElementById('move-modal').classList.remove('hidden');
 }
 
+// --- Gumroad License Verification Service ---
+async function verifyGumroadLicense(licenseKey, isSilent = false) {
+  const statusMsg = document.getElementById('paywall-status-message');
+  
+  if (!isSilent && statusMsg) {
+    statusMsg.className = 'paywall-status-text';
+    statusMsg.style.display = 'block';
+    statusMsg.style.color = 'var(--text-secondary)';
+    statusMsg.textContent = 'Verifying license key...';
+  }
+  
+  try {
+    const response = await fetch('https://api.gumroad.com/v2/licenses/verify', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: new URLSearchParams({
+        'product_id': GUMROAD_PRODUCT_ID,
+        'license_key': licenseKey.trim(),
+        'increment_uses_count': 'true'
+      })
+    });
+    
+    const data = await response.json();
+    
+    if (data.success && data.purchase && !data.purchase.refunded && !data.purchase.chargebacked) {
+      isProUser = true;
+      if (chrome.storage && chrome.storage.local) {
+        await chrome.storage.local.set({ proLicenseKey: licenseKey.trim(), isProUser: true });
+      } else {
+        localStorage.setItem('proLicenseKey', licenseKey.trim());
+        localStorage.setItem('isProUser', 'true');
+      }
+      
+      if (!isSilent) {
+        if (statusMsg) {
+          statusMsg.className = 'paywall-success-text';
+          statusMsg.style.color = 'var(--success-color)';
+          statusMsg.textContent = 'Pro License Activated Successfully! Thank you!';
+        }
+        showToast('Pro features unlocked!');
+        setTimeout(() => {
+          document.getElementById('paywall-modal').classList.add('hidden');
+          render();
+        }, 1500);
+      }
+      return true;
+    } else {
+      throw new Error(data.message || 'Verification failed. Key may be refunded or invalid.');
+    }
+  } catch (err) {
+    console.error("License verification failed:", err);
+    isProUser = false;
+    if (chrome.storage && chrome.storage.local) {
+      await chrome.storage.local.remove(['proLicenseKey', 'isProUser']);
+    } else {
+      localStorage.removeItem('proLicenseKey');
+      localStorage.removeItem('isProUser');
+    }
+    
+    if (!isSilent && statusMsg) {
+      statusMsg.className = 'paywall-error-text';
+      statusMsg.style.color = 'var(--danger-color)';
+      statusMsg.textContent = err.message || 'Invalid license key. Please check and try again.';
+    }
+    return false;
+  }
+}
+
+async function checkProStatusOnStartup() {
+  let savedKey = null;
+  if (chrome.storage && chrome.storage.local) {
+    const res = await chrome.storage.local.get(['proLicenseKey', 'isProUser']);
+    savedKey = res.proLicenseKey;
+    isProUser = !!res.isProUser;
+  } else {
+    savedKey = localStorage.getItem('proLicenseKey');
+    isProUser = localStorage.getItem('isProUser') === 'true';
+  }
+  
+  if (savedKey) {
+    verifyGumroadLicense(savedKey, true);
+  }
+}
+
+function showPaywallModal() {
+  const statusMsg = document.getElementById('paywall-status-message');
+  if (statusMsg) statusMsg.style.display = 'none';
+  const licenseInput = document.getElementById('license-input');
+  if (licenseInput) licenseInput.value = '';
+  const modal = document.getElementById('paywall-modal');
+  if (modal) modal.classList.remove('hidden');
+}
+
 // --- Helper Functions ---
 function getDomainName(url) {
   try {
@@ -2582,7 +2781,7 @@ async function handleStartBingImport() {
   const startBtn = document.getElementById('start-bing-import-btn');
   
   if (!activeBingTabId) {
-    showToast("Active tab is not Bing Saves.");
+    showToast("Active tab is not bing.com/saves (Microsoft Edge Collections).");
     return;
   }
   

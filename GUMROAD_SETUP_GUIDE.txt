@@ -1,0 +1,219 @@
+================================================================================
+  GUMROAD SETUP GUIDE — Edge Collections Sidebar Pro
+  For Bangladeshi Developers (Payoneer Payout)
+================================================================================
+
+This guide walks you through publishing your extension on Gumroad, enabling
+license key generation, connecting Payoneer for payouts, and wiring everything
+up inside your extension code.
+
+--------------------------------------------------------------------------------
+STEP 1: CREATE A GUMROAD ACCOUNT
+--------------------------------------------------------------------------------
+
+1. Go to:  https://gumroad.com
+2. Click "Start selling" and sign up with your email.
+3. Verify your email address from the confirmation mail Gumroad sends you.
+
+--------------------------------------------------------------------------------
+STEP 2: SET UP PAYONEER PAYOUTS (Bangladesh-Friendly)
+--------------------------------------------------------------------------------
+
+Gumroad does NOT support direct bank transfers to Bangladesh, but it fully
+supports Payoneer — which does work in Bangladesh.
+
+  a) Create a Payoneer account first (if you don't have one):
+       https://www.payoneer.com
+
+  b) In Gumroad, go to:
+       Settings → Payouts → Connect Payoneer
+
+  c) Follow the on-screen steps to link your Payoneer account.
+
+  NOTE: Gumroad processes payouts every Friday once your balance reaches $10.
+        Payoneer then transfers the money to your local bank in BDT.
+
+--------------------------------------------------------------------------------
+STEP 3: CREATE YOUR PRODUCT
+--------------------------------------------------------------------------------
+
+1. In your Gumroad dashboard, click "+ New product".
+2. Choose "Digital product".
+3. Fill in the following details:
+
+   Name:        Edge Collections Sidebar Pro
+   Price:       $4.99  (one-time purchase)
+   Summary:     Unlock the full power of Edge Collections Sidebar.
+   Description: (Use the text below)
+
+   ─────────────────────────────────────────────────────────────────────────────
+   Upgrade to Pro and unlock:
+
+   ✔ Unlimited Collections  — No more 3-folder limit
+   ✔ Custom Color Themes    — Color-code your folders
+   ✔ Global Omnisearch      — Search across ALL collections instantly
+   ✔ Backup & Restore       — Import from file, clipboard, or Bing Saves
+   ✔ One-time purchase      — No subscriptions, yours forever
+
+   After purchasing, you will receive a unique License Key in your email.
+   Open the extension → click any Pro feature → paste your key → Activate!
+   ─────────────────────────────────────────────────────────────────────────────
+
+4. Upload a file — Gumroad requires at least one file attachment.
+   Use the "Thank-You.txt" file already in your project folder:
+     c:\Users\USER\Desktop\Aminul\Collections\Thank-You.txt
+
+   It contains a ready-to-use thank-you message for buyers.
+
+--------------------------------------------------------------------------------
+STEP 4: ADD LICENSE KEY MODULE  *** CRITICAL STEP — NEW UI ***
+--------------------------------------------------------------------------------
+
+Without this, buyers won't receive a key and in-app activation won't work!
+
+Gumroad's UI has changed. The license key option is NO LONGER a simple toggle
+on the product creation page. It is now a "Content Module" you must add from
+within the product's Content tab.
+
+Here is exactly how to do it:
+
+1. In your Gumroad dashboard, open your product.
+2. Click on the "Content" tab (the tab where you upload files).
+3. Look for a button that says "+ Insert" or "Add a block" / "Add content".
+4. Click it — a dropdown or panel will appear with block types.
+5. Select "License key" from the list of modules.
+6. A License Key block will appear in your product's content area.
+   (You can drag it above or below your uploaded file — order doesn't matter.)
+7. Click Save / Publish.
+
+After this, every buyer will automatically receive a unique License Key
+(format: XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX) shown on their receipt page
+and sent to their email.
+
+  TIP: If you don't see an "Insert" button, try scrolling down inside the
+       Content tab. The button sometimes appears below the file upload area.
+
+  TIP: If you still can't find it, make sure your product type is set to
+       "Digital product" (not a physical product or a membership/subscription).
+
+--------------------------------------------------------------------------------
+STEP 5: GET YOUR PRODUCT ID AND URL
+--------------------------------------------------------------------------------
+
+1. Open your product in Gumroad editor.
+2. Click "Share" or "View product page" to see the public URL:
+      https://yourname.gumroad.com/l/edge-collections-pro
+                                     ^^^^^^^^^^^^^^^^^^^^
+                                     This part is the PERMALINK (Product ID)
+
+3. Write down:
+   - Your full Product URL:   https://yourname.gumroad.com/l/PERMALINK
+   - Your Product Permalink:  PERMALINK  (just the slug after /l/)
+
+   EXAMPLE:
+   - Product URL:   https://aminul.gumroad.com/l/edge-collections-pro
+   - Product ID:    edge-collections-pro
+
+--------------------------------------------------------------------------------
+STEP 6: UPDATE THE EXTENSION CODE
+--------------------------------------------------------------------------------
+
+Open the file:  sidepanel.js
+
+Find lines 17–18 near the top of the file (inside the State Management block):
+
+   BEFORE:
+   ───────────────────────────────────────────────────────────────────────────
+   const GUMROAD_PRODUCT_ID  = "edge-collections-pro";
+   const GUMROAD_PRODUCT_URL = "https://gumroad.com/l/edge-collections-pro";
+   ───────────────────────────────────────────────────────────────────────────
+
+   AFTER (replace with YOUR actual values):
+   ───────────────────────────────────────────────────────────────────────────
+   const GUMROAD_PRODUCT_ID  = "YOUR_PERMALINK_HERE";
+   const GUMROAD_PRODUCT_URL = "https://yourname.gumroad.com/l/YOUR_PERMALINK_HERE";
+   ───────────────────────────────────────────────────────────────────────────
+
+   IMPORTANT: GUMROAD_PRODUCT_ID must match the permalink EXACTLY.
+              If the permalink is "xk8qw", the API will reject all other values.
+
+After editing, save sidepanel.js and reload the extension in:
+   edge://extensions/  →  find "Edge Collections Sidebar"  →  click "Reload"
+
+--------------------------------------------------------------------------------
+STEP 7: TEST THE FULL PURCHASE FLOW
+--------------------------------------------------------------------------------
+
+Option A — Test with a 100% discount coupon (recommended, free):
+   1. In Gumroad dashboard → your product → "Coupons" tab.
+   2. Create a new coupon: Discount = 100%, Usage limit = 1.
+   3. Copy the coupon code.
+   4. "Purchase" your product using that coupon (price becomes $0).
+   5. You'll still receive a real License Key in the email.
+   6. Use it to test the activation flow in the extension.
+
+Option B — Test with a real purchase:
+   1. Buy your own product using a real card (you'll pay yourself, then
+      get it back on payout day minus Gumroad's 10% fee).
+   2. Open the receipt email. Copy the License Key.
+   3. Open the extension → trigger any Pro feature → paste the key → Activate.
+   4. Verify you see "Pro License Activated Successfully!"
+
+--------------------------------------------------------------------------------
+STEP 8: PUBLISH AND SHARE
+--------------------------------------------------------------------------------
+
+1. In Gumroad, make sure your product status is set to "Published".
+2. Share your product URL on:
+   - Microsoft Edge Add-ons Store listing description
+   - The extension's in-app "Get Pro License Key" button (already wired up)
+   - Your GitHub README if you have one
+
+--------------------------------------------------------------------------------
+HOW THE LICENSE VERIFICATION WORKS (Technical Notes)
+--------------------------------------------------------------------------------
+
+When a user clicks "Activate" in the extension, the code calls:
+
+   POST https://api.gumroad.com/v2/licenses/verify
+   Body:
+     product_id           = YOUR_GUMROAD_PRODUCT_ID  (the permalink)
+     license_key          = KEY_PASTED_BY_USER
+     increment_uses_count = true
+
+Gumroad responds with:
+   {
+     "success": true,
+     "purchase": {
+       "email": "buyer@example.com",
+       "refunded": false,
+       "chargebacked": false
+     }
+   }
+
+If success=true and refunded=false → Pro features are unlocked and the
+key is saved in chrome.storage.local so the user stays Pro permanently.
+
+If the key is invalid, refunded, or charged-back → the error is shown
+in the paywall modal and access is denied.
+
+No server required. Everything runs client-side from the extension.
+
+--------------------------------------------------------------------------------
+SUMMARY CHECKLIST
+--------------------------------------------------------------------------------
+
+  [ ]  Gumroad account created at gumroad.com
+  [ ]  Payoneer account created and connected in Gumroad Settings → Payouts
+  [ ]  Product created with name, price ($4.99), and description
+  [ ]  File uploaded (Thank-You.txt from the project folder)
+  [ ]  "License key" module added via Content → Insert → License key
+  [ ]  Product published (not Draft)
+  [ ]  Product permalink (ID) and URL copied from the product page
+  [ ]  sidepanel.js lines 17-18 updated with your actual PRODUCT_ID and URL
+  [ ]  Extension reloaded in edge://extensions/
+  [ ]  Test purchase done using a 100% coupon and activation verified
+
+================================================================================
+  You're ready to earn! Every sale goes directly to Payoneer → your bank.
+================================================================================
