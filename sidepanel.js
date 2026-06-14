@@ -131,6 +131,27 @@ const DBService = {
     });
   },
 
+  updateCollectionColor(id, color) {
+    return new Promise((resolve, reject) => {
+      if (!db) return reject(new Error("Database not initialized"));
+      
+      const transaction = db.transaction(['collections'], 'readwrite');
+      const store = transaction.objectStore('collections');
+      
+      const getReq = store.get(id);
+      getReq.onsuccess = () => {
+        const col = getReq.result;
+        if (!col) return reject(new Error("Collection not found"));
+        col.color = color;
+        const updateReq = store.put(col);
+        updateReq.onsuccess = () => resolve(col);
+        updateReq.onerror = (e) => reject(e.target.error);
+      };
+      getReq.onerror = (e) => reject(e.target.error);
+    });
+  },
+
+
   deleteCollection(id) {
     return new Promise((resolve, reject) => {
       if (!db) return reject(new Error("Database not initialized"));
@@ -720,6 +741,13 @@ function setupEventListeners() {
       }
     });
   }
+
+  // Dismiss collection color picker popover on click outside
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.color-picker-popover') && !e.target.closest('.change-color-btn')) {
+      document.querySelectorAll('.color-picker-popover').forEach(el => el.remove());
+    }
+  });
 }
 
 // --- View Router ---
@@ -803,7 +831,7 @@ async function renderCollectionsList() {
     
     filteredCols.forEach(col => {
       const card = document.createElement('div');
-      card.className = 'collection-card';
+      card.className = `collection-card col-color-${col.color || 'blue'}`;
       card.dataset.id = col.id;
       
       card.innerHTML = `
@@ -819,6 +847,11 @@ async function renderCollectionsList() {
           </div>
         </div>
         <div class="collection-card-actions">
+          <button class="icon-button-small change-color-btn" title="Change Color" data-id="${col.id}">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+              <path d="M12 3a9 9 0 0 0 0 18c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9c-.83 0-1.5-.67-1.5-1.5S5.67 9 6.5 9 8 9.67 8 10.5 7.33 12 6.5 12zm3-4C8.67 8 8 7.33 8 6.5S8.67 5 9.5 5s1.5.67 1.5 1.5S10.33 8 9.5 8zm5 0c-.83 0-1.5-.67-1.5-1.5S13.67 5 14.5 5s1.5.67 1.5 1.5S15.33 8 14.5 8zm3 4c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>
+            </svg>
+          </button>
           <button class="icon-button-small delete-col-shortcut" title="Delete Collection" data-id="${col.id}">
             <svg viewBox="0 0 24 24" width="14" height="14">
               <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
@@ -829,10 +862,45 @@ async function renderCollectionsList() {
       
       // Click to open collection
       card.addEventListener('click', (e) => {
-        // Prevent opening if clicking shortcut delete
-        if (e.target.closest('.delete-col-shortcut')) return;
+        // Prevent opening if clicking shortcut delete, palette button, or popover
+        if (e.target.closest('.delete-col-shortcut') || e.target.closest('.change-color-btn') || e.target.closest('.color-picker-popover')) return;
         setView('detail', col.id);
       });
+
+      // Color change listener
+      const changeColorBtn = card.querySelector('.change-color-btn');
+      if (changeColorBtn) {
+        changeColorBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          
+          const existingPopover = card.querySelector('.color-picker-popover');
+          if (existingPopover) {
+            existingPopover.remove();
+            return;
+          }
+          
+          document.querySelectorAll('.color-picker-popover').forEach(el => el.remove());
+          
+          const popover = document.createElement('div');
+          popover.className = 'color-picker-popover';
+          
+          const colors = ['blue', 'purple', 'red', 'green', 'orange'];
+          colors.forEach(color => {
+            const btn = document.createElement('button');
+            btn.className = `color-dot-btn btn-${color} ${col.color === color || (!col.color && color === 'blue') ? 'active' : ''}`;
+            btn.title = color.charAt(0).toUpperCase() + color.slice(1);
+            btn.addEventListener('click', async (evt) => {
+              evt.stopPropagation();
+              await DBService.updateCollectionColor(col.id, color);
+              showToast(`Collection color updated to ${color}`);
+              render();
+            });
+            popover.appendChild(btn);
+          });
+          
+          card.appendChild(popover);
+        });
+      }
       
       // Shortcut delete listener
       card.querySelector('.delete-col-shortcut').addEventListener('click', async (e) => {
@@ -942,6 +1010,34 @@ async function renderCollectionDetails() {
       return;
     }
     
+    const detailPanel = document.getElementById('collection-items-view');
+    if (detailPanel) {
+      detailPanel.className = 'view-panel col-color-' + (activeCol.color || 'blue');
+    }
+
+    const detailColorPicker = document.getElementById('detail-color-picker');
+    if (detailColorPicker) {
+      detailColorPicker.innerHTML = '';
+      const label = document.createElement('span');
+      label.className = 'detail-color-label';
+      label.textContent = 'Theme:';
+      detailColorPicker.appendChild(label);
+      
+      const colors = ['blue', 'purple', 'red', 'green', 'orange'];
+      colors.forEach(color => {
+        const btn = document.createElement('button');
+        btn.className = `color-dot-btn btn-${color} ${activeCol.color === color || (!activeCol.color && color === 'blue') ? 'active' : ''}`;
+        btn.title = color.charAt(0).toUpperCase() + color.slice(1);
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          await DBService.updateCollectionColor(activeCol.id, color);
+          showToast(`Theme updated to ${color}`);
+          render();
+        });
+        detailColorPicker.appendChild(btn);
+      });
+    }
+
     titleHeading.textContent = activeCol.name;
     document.getElementById('view-title').textContent = activeCol.name;
     

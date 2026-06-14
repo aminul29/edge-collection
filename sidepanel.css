@@ -20,6 +20,17 @@
   --danger-light: rgba(223, 26, 41, 0.08);
   --success-color: #10b981;
   
+  --col-blue: #0078d4;
+  --col-blue-light: rgba(0, 120, 212, 0.08);
+  --col-purple: #8764b8;
+  --col-purple-light: rgba(135, 100, 184, 0.08);
+  --col-red: #e81123;
+  --col-red-light: rgba(232, 17, 35, 0.08);
+  --col-green: #107c41;
+  --col-green-light: rgba(16, 124, 65, 0.08);
+  --col-orange: #d83b01;
+  --col-orange-light: rgba(216, 59, 1, 0.08);
+
   --font-sans: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --radius-sm: 6px;
   --radius-md: 10px;
@@ -48,6 +59,17 @@
     --danger-color: #f87171;
     --danger-hover: #fca5a5;
     --danger-light: rgba(248, 113, 113, 0.15);
+
+    --col-blue: #3b82f6;
+    --col-blue-light: rgba(59, 130, 246, 0.15);
+    --col-purple: #a684eb;
+    --col-purple-light: rgba(166, 132, 235, 0.15);
+    --col-red: #ff5f5f;
+    --col-red-light: rgba(255, 95, 95, 0.15);
+    --col-green: #2ecc71;
+    --col-green-light: rgba(46, 204, 113, 0.15);
+    --col-orange: #f39c12;
+    --col-orange-light: rgba(243, 156, 18, 0.15);
   }
 }
 
@@ -1446,3 +1468,132 @@ body {
   color: var(--primary-color) !important;
   border-color: var(--primary-color) !important;
 }
+
+/* Color-coded collections accent mapping and UI classes */
+.col-color-blue {
+  --col-accent: var(--col-blue);
+  --col-accent-light: var(--col-blue-light);
+}
+.col-color-purple {
+  --col-accent: var(--col-purple);
+  --col-accent-light: var(--col-purple-light);
+}
+.col-color-red {
+  --col-accent: var(--col-red);
+  --col-accent-light: var(--col-red-light);
+}
+.col-color-green {
+  --col-accent: var(--col-green);
+  --col-accent-light: var(--col-green-light);
+}
+.col-color-orange {
+  --col-accent: var(--col-orange);
+  --col-accent-light: var(--col-orange-light);
+}
+
+/* Update collection-card icon container styles dynamically */
+.collection-card {
+  border-left: 4px solid transparent !important;
+}
+.collection-card.col-color-blue { border-left-color: var(--col-blue) !important; }
+.collection-card.col-color-purple { border-left-color: var(--col-purple) !important; }
+.collection-card.col-color-red { border-left-color: var(--col-red) !important; }
+.collection-card.col-color-green { border-left-color: var(--col-green) !important; }
+.collection-card.col-color-orange { border-left-color: var(--col-orange) !important; }
+
+.collection-card .collection-icon-box {
+  background-color: var(--col-accent-light, var(--primary-light)) !important;
+  color: var(--col-accent, var(--primary-color)) !important;
+}
+
+/* Detail view active accents */
+.view-panel.col-color-blue {
+  --col-accent: var(--col-blue);
+  --col-accent-light: var(--col-blue-light);
+}
+.view-panel.col-color-purple {
+  --col-accent: var(--col-purple);
+  --col-accent-light: var(--col-purple-light);
+}
+.view-panel.col-color-red {
+  --col-accent: var(--col-red);
+  --col-accent-light: var(--col-red-light);
+}
+.view-panel.col-color-green {
+  --col-accent: var(--col-green);
+  --col-accent-light: var(--col-green-light);
+}
+.view-panel.col-color-orange {
+  --col-accent: var(--col-orange);
+  --col-accent-light: var(--col-orange-light);
+}
+
+.view-panel .collection-detail-header {
+  border-bottom: 2px solid var(--col-accent, var(--border-color)) !important;
+}
+
+/* Collection Card Color Picker Popover */
+.color-picker-popover {
+  position: absolute;
+  top: calc(100% - 10px);
+  right: 12px;
+  background-color: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: 6px;
+  display: flex;
+  gap: 6px;
+  z-index: 999;
+  animation: fadeIn var(--transition-fast);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.color-dot-btn {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1.5px solid transparent;
+  cursor: pointer;
+  transition: transform var(--transition-fast), border-color var(--transition-fast);
+}
+
+.color-dot-btn:hover {
+  transform: scale(1.25);
+}
+
+.color-dot-btn.active {
+  border-color: var(--text-primary);
+  box-shadow: 0 0 0 2px var(--surface-color) inset;
+}
+
+.color-dot-btn.btn-blue { background-color: var(--col-blue) !important; }
+.color-dot-btn.btn-purple { background-color: var(--col-purple) !important; }
+.color-dot-btn.btn-red { background-color: var(--col-red) !important; }
+.color-dot-btn.btn-green { background-color: var(--col-green) !important; }
+.color-dot-btn.btn-orange { background-color: var(--col-orange) !important; }
+
+/* Detail View Color Picker */
+.detail-color-picker {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  margin-left: 8px;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-color);
+  border: 1px solid var(--border-color);
+}
+
+.detail-color-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  margin-right: 2px;
+}
+
