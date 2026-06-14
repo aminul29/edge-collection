@@ -1099,3 +1099,189 @@ body {
   .note-pink   { background-color: rgba(236, 72, 153, 0.08); border-color: rgba(236, 72, 153, 0.25); color: #f472b6; }
   .note-purple { background-color: rgba(139, 92, 246, 0.08); border-color: rgba(139, 92, 246, 0.25); color: #a78bfa; }
 }
+
+/* Grid View Layout */
+.items-list.grid-view {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 12px;
+}
+
+/* Grid card overrides for link items */
+.items-list.grid-view .item-card {
+  flex-direction: column;
+  align-items: stretch;
+  padding: 0;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  gap: 0;
+  height: 180px;
+  position: relative;
+}
+
+/* Page Thumbnail Styles */
+.item-thumbnail-container {
+  display: none; /* hidden in list view */
+}
+
+.items-list.grid-view .item-thumbnail-container {
+  display: block;
+  position: relative;
+  width: 100%;
+  height: 90px;
+  background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);
+  overflow: hidden;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+@media (prefers-color-scheme: dark) {
+  .items-list.grid-view .item-thumbnail-container {
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  }
+}
+
+.item-thumbnail {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform var(--transition-normal);
+}
+
+.items-list.grid-view .item-card:hover .item-thumbnail {
+  transform: scale(1.05);
+}
+
+.thumbnail-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--primary-light), var(--border-color));
+  color: var(--primary-color);
+  font-size: 24px;
+  font-weight: 700;
+  user-select: none;
+}
+
+/* Details and Info block in grid view */
+.items-list.grid-view .item-favicon {
+  display: none; /* hide main favicon in grid view */
+}
+
+.items-list.grid-view .item-favicon-fallback {
+  display: none !important;
+}
+
+.items-list.grid-view .item-details {
+  padding: 8px 10px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 0;
+}
+
+.items-list.grid-view .item-title {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.items-list.grid-view .item-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  font-size: 9px;
+  color: var(--text-tertiary);
+  margin-top: auto;
+}
+
+.items-list.grid-view .item-meta span:nth-child(2) {
+  display: none; /* hide separator bullet */
+}
+
+/* Floating delete action for grid view */
+.items-list.grid-view .item-actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+  z-index: 5;
+}
+
+.items-list.grid-view .item-card:hover .item-actions {
+  opacity: 1;
+}
+
+.items-list.grid-view .delete-item-btn {
+  background-color: var(--surface-color);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+}
+
+.items-list.grid-view .delete-item-btn:hover {
+  background-color: var(--danger-light);
+  color: var(--danger-color);
+  border-color: rgba(223, 26, 41, 0.2);
+}
+
+/* Grid card overrides for note cards */
+.items-list.grid-view .note-card {
+  height: 180px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 10px 12px;
+}
+
+.items-list.grid-view .note-content {
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-y: auto;
+  max-height: 110px;
+  min-height: auto;
+  flex: 1;
+}
+
+.items-list.grid-view .note-footer {
+  margin-top: 6px;
+  flex-shrink: 0;
+}
+
+/* Drag and Drop Feedback */
+.dragging {
+  opacity: 0.4 !important;
+  border: 1px dashed var(--primary-color) !important;
+  box-shadow: none !important;
+}
+
+.drag-hover {
+  border: 2px dashed var(--primary-color) !important;
+  background-color: var(--primary-light) !important;
+}
+
+#back-button {
+  transition: transform var(--transition-fast) ease, background-color var(--transition-fast) ease, color var(--transition-fast) ease;
+}
+
+#back-button.drag-hover {
+  background-color: var(--primary-light) !important;
+  color: var(--primary-color) !important;
+  transform: scale(1.15);
+}

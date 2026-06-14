@@ -5,6 +5,11 @@ let activeCollectionId = null;
 let collectionsList = []; // Caching collections for search filtering
 let activeCollectionItems = []; // Caching items for search filtering
 
+let draggedCollectionId = null;
+let draggedItemId = null;
+let draggedType = null; // 'collection' or 'item'
+let backDragTimeout = null;
+
 const DB_NAME = 'CollectionsDB';
 const DB_VERSION = 1;
 
@@ -72,8 +77,12 @@ const DBService = {
           count: counts[col.id] || 0
         }));
         
-        // Sort collections by creation date (newest on top)
-        result.sort((a, b) => b.created - a.created);
+        // Sort collections by custom order or creation date
+        result.sort((a, b) => {
+          const orderA = a.sortOrder !== undefined ? a.sortOrder : -a.created;
+          const orderB = b.sortOrder !== undefined ? b.sortOrder : -b.created;
+          return orderA - orderB;
+        });
         resolve(result);
       } catch (err) {
         reject(err);
@@ -156,8 +165,12 @@ const DBService = {
       
       request.onsuccess = (e) => {
         const items = e.target.result || [];
-        // Sort items by creation date (newest on top)
-        items.sort((a, b) => b.created - a.created);
+        // Sort items by custom order or creation date
+        items.sort((a, b) => {
+          const orderA = a.sortOrder !== undefined ? a.sortOrder : -a.created;
+          const orderB = b.sortOrder !== undefined ? b.sortOrder : -b.created;
+          return orderA - orderB;
+        });
         resolve(items);
       };
       
@@ -165,7 +178,7 @@ const DBService = {
     });
   },
 
-  addItem(collectionId, title, url, favicon) {
+  addItem(collectionId, title, url, favicon, thumbnail) {
     return new Promise((resolve, reject) => {
       if (!db) return reject(new Error("Database not initialized"));
       
@@ -177,6 +190,7 @@ const DBService = {
         title: title || "Untitled Page",
         url: url,
         favicon: favicon || "",
+        thumbnail: thumbnail || "",
         type: "link",
         created: Date.now()
       };
@@ -301,6 +315,7 @@ const DBService = {
             itemStoreObj.title = item.title || "Untitled";
             itemStoreObj.url = item.url;
             itemStoreObj.favicon = item.favicon || "";
+            itemStoreObj.thumbnail = item.thumbnail || "";
           }
           
           itemStore.add(itemStoreObj);
@@ -309,7 +324,7 @@ const DBService = {
       });
     });
   },
-
+ 
   exportBackupData() {
     return new Promise(async (resolve, reject) => {
       if (!db) return reject(new Error("Database not initialized"));
@@ -348,7 +363,8 @@ const DBService = {
               type: 'link',
               title: item.title,
               url: item.url,
-              favicon: item.favicon || ""
+              favicon: item.favicon || "",
+              thumbnail: item.thumbnail || ""
             });
           }
         });
@@ -367,6 +383,67 @@ const DBService = {
   }
 };
 
+// --- Reordering and Move Operations ---
+async function reorderCollections(draggedId, targetId) {
+  if (!db) return;
+  const collections = await DBService.getAllCollections();
+  const draggedIdx = collections.findIndex(c => c.id === draggedId);
+  const targetIdx = collections.findIndex(c => c.id === targetId);
+  if (draggedIdx === -1 || targetIdx === -1) return;
+  
+  const [draggedCol] = collections.splice(draggedIdx, 1);
+  collections.splice(targetIdx, 0, draggedCol);
+  
+  const transaction = db.transaction(['collections'], 'readwrite');
+  const store = transaction.objectStore('collections');
+  
+  for (let i = 0; i < collections.length; i++) {
+    collections[i].sortOrder = i;
+    store.put(collections[i]);
+  }
+}
+
+async function reorderItems(collectionId, draggedId, targetId) {
+  if (!db) return;
+  const items = await DBService.getItems(collectionId);
+  const draggedIdx = items.findIndex(i => i.id === draggedId);
+  const targetIdx = items.findIndex(i => i.id === targetId);
+  if (draggedIdx === -1 || targetIdx === -1) return;
+  
+  const [draggedItem] = items.splice(draggedIdx, 1);
+  items.splice(targetIdx, 0, draggedItem);
+  
+  const transaction = db.transaction(['items'], 'readwrite');
+  const store = transaction.objectStore('items');
+  
+  for (let i = 0; i < items.length; i++) {
+    items[i].sortOrder = i;
+    store.put(items[i]);
+  }
+}
+
+async function moveItemToCollection(itemId, targetCollectionId) {
+  if (!db) return;
+  const transaction = db.transaction(['items'], 'readwrite');
+  const store = transaction.objectStore('items');
+  
+  return new Promise((resolve, reject) => {
+    const getReq = store.get(itemId);
+    getReq.onsuccess = () => {
+      const item = getReq.result;
+      if (!item) return reject(new Error("Item not found"));
+      
+      item.collectionId = targetCollectionId;
+      delete item.sortOrder; // falls back to newest inside the target collection
+      
+      const updateReq = store.put(item);
+      updateReq.onsuccess = () => resolve(item);
+      updateReq.onerror = (e) => reject(e.target.error);
+    };
+    getReq.onerror = (e) => reject(e.target.error);
+  });
+}
+
 // --- DOM and Event Listeners Setup ---
 document.addEventListener('DOMContentLoaded', async () => {
   try {
@@ -381,9 +458,35 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 function setupEventListeners() {
   // Navigation
-  document.getElementById('back-button').addEventListener('click', () => {
-    setView('master');
-  });
+  const backBtn = document.getElementById('back-button');
+  if (backBtn) {
+    backBtn.addEventListener('click', () => {
+      setView('master');
+    });
+    
+    backBtn.addEventListener('dragover', (e) => {
+      e.preventDefault();
+    });
+    
+    backBtn.addEventListener('dragenter', () => {
+      if (draggedType === 'item' && currentView === 'detail') {
+        backBtn.classList.add('drag-hover');
+        if (backDragTimeout) clearTimeout(backDragTimeout);
+        backDragTimeout = setTimeout(() => {
+          setView('master');
+          backBtn.classList.remove('drag-hover');
+        }, 600);
+      }
+    });
+    
+    backBtn.addEventListener('dragleave', () => {
+      backBtn.classList.remove('drag-hover');
+      if (backDragTimeout) {
+        clearTimeout(backDragTimeout);
+        backDragTimeout = null;
+      }
+    });
+  }
 
   // Action Bar Buttons
   document.getElementById('add-current-tab-btn').addEventListener('click', handleAddCurrentTab);
@@ -391,6 +494,11 @@ function setupEventListeners() {
   const addNoteBtn = document.getElementById('add-note-btn');
   if (addNoteBtn) {
     addNoteBtn.addEventListener('click', handleAddNote);
+  }
+  
+  const toggleViewBtn = document.getElementById('toggle-view-btn');
+  if (toggleViewBtn) {
+    toggleViewBtn.addEventListener('click', handleToggleView);
   }
   
   const createBtn = document.getElementById('create-collection-btn');
@@ -696,6 +804,50 @@ async function renderCollectionsList() {
         }
       });
       
+      // Drag and drop setup for reordering collections and moving items into collections
+      card.setAttribute('draggable', 'true');
+      
+      card.addEventListener('dragstart', (e) => {
+        card.classList.add('dragging');
+        draggedCollectionId = col.id;
+        draggedType = 'collection';
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      
+      card.addEventListener('dragend', () => {
+        card.classList.remove('dragging');
+        draggedCollectionId = null;
+        draggedType = null;
+        document.querySelectorAll('.collection-card').forEach(el => el.classList.remove('drag-hover'));
+      });
+      
+      card.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        if (draggedType === 'collection' && draggedCollectionId !== col.id) {
+          card.classList.add('drag-hover');
+        } else if (draggedType === 'item') {
+          card.classList.add('drag-hover');
+        }
+      });
+      
+      card.addEventListener('dragleave', () => {
+        card.classList.remove('drag-hover');
+      });
+      
+      card.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        card.classList.remove('drag-hover');
+        
+        if (draggedType === 'collection' && draggedCollectionId && draggedCollectionId !== col.id) {
+          await reorderCollections(draggedCollectionId, col.id);
+          render();
+        } else if (draggedType === 'item' && draggedItemId) {
+          await moveItemToCollection(draggedItemId, col.id);
+          showToast(`Moved item to "${col.name}"`);
+          render();
+        }
+      });
+      
       container.appendChild(card);
     });
   } catch (err) {
@@ -708,6 +860,10 @@ async function renderCollectionDetails() {
   const container = document.getElementById('items-container');
   const emptyState = document.getElementById('items-empty-state');
   const titleHeading = document.getElementById('active-collection-name');
+  
+  // Apply Grid/List view preference layout class
+  const pref = localStorage.getItem('collections_view_pref') || 'list';
+  updateViewPrefUI(pref);
   
   try {
     // Refresh collection metadata (for name/rename sync)
@@ -820,6 +976,44 @@ async function renderCollectionDetails() {
           }
         });
         
+        // Drag and drop setup for reordering items inside a collection
+        card.setAttribute('draggable', 'true');
+        
+        card.addEventListener('dragstart', (e) => {
+          card.classList.add('dragging');
+          draggedItemId = item.id;
+          draggedType = 'item';
+          e.dataTransfer.effectAllowed = 'move';
+        });
+        
+        card.addEventListener('dragend', () => {
+          card.classList.remove('dragging');
+          draggedItemId = null;
+          draggedType = null;
+          document.querySelectorAll('.item-card, .note-card').forEach(el => el.classList.remove('drag-hover'));
+        });
+        
+        card.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          if (draggedType === 'item' && draggedItemId !== item.id) {
+            card.classList.add('drag-hover');
+          }
+        });
+        
+        card.addEventListener('dragleave', () => {
+          card.classList.remove('drag-hover');
+        });
+        
+        card.addEventListener('drop', async (e) => {
+          e.preventDefault();
+          card.classList.remove('drag-hover');
+          
+          if (draggedType === 'item' && draggedItemId && draggedItemId !== item.id) {
+            await reorderItems(activeCollectionId, draggedItemId, item.id);
+            render();
+          }
+        });
+        
         container.appendChild(card);
       } else {
         const card = document.createElement('div');
@@ -840,7 +1034,15 @@ async function renderCollectionDetails() {
           faviconSrc = `https://www.google.com/s2/favicons?sz=64&domain=${domain}`;
         }
 
+        const fallbackChar = domain ? domain[0].toUpperCase() : 'W';
+
         card.innerHTML = `
+          <div class="item-thumbnail-container">
+            ${item.thumbnail ? `<img class="item-thumbnail" src="${escapeHTML(item.thumbnail)}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />` : ''}
+            <div class="thumbnail-fallback" style="${item.thumbnail ? 'display: none;' : ''}">
+              <span>${fallbackChar}</span>
+            </div>
+          </div>
           <img class="item-favicon" src="${faviconSrc}" alt="" 
             onerror="this.src='https://www.google.com/s2/favicons?sz=64&domain=${domain}'; this.onerror=function(){ this.style.display='none'; this.nextElementSibling.style.display='inline-flex'; }" />
           <div class="item-favicon-fallback" style="display:none; width:16px; height:16px; align-items:center; justify-content:center; background:var(--primary-light); color:var(--primary-color); border-radius:2px; font-size:10px; font-weight:bold; margin-top:3px; flex-shrink:0;">
@@ -883,6 +1085,44 @@ async function renderCollectionDetails() {
           await DBService.deleteItem(id);
           showToast("Removed item");
           render();
+        });
+        
+        // Drag and drop setup for reordering items inside a collection
+        card.setAttribute('draggable', 'true');
+        
+        card.addEventListener('dragstart', (e) => {
+          card.classList.add('dragging');
+          draggedItemId = item.id;
+          draggedType = 'item';
+          e.dataTransfer.effectAllowed = 'move';
+        });
+        
+        card.addEventListener('dragend', () => {
+          card.classList.remove('dragging');
+          draggedItemId = null;
+          draggedType = null;
+          document.querySelectorAll('.item-card, .note-card').forEach(el => el.classList.remove('drag-hover'));
+        });
+        
+        card.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          if (draggedType === 'item' && draggedItemId !== item.id) {
+            card.classList.add('drag-hover');
+          }
+        });
+        
+        card.addEventListener('dragleave', () => {
+          card.classList.remove('drag-hover');
+        });
+        
+        card.addEventListener('drop', async (e) => {
+          e.preventDefault();
+          card.classList.remove('drag-hover');
+          
+          if (draggedType === 'item' && draggedItemId && draggedItemId !== item.id) {
+            await reorderItems(activeCollectionId, draggedItemId, item.id);
+            render();
+          }
         });
         
         container.appendChild(card);
@@ -1028,12 +1268,44 @@ async function handleAddCurrentTab() {
       collectionName = activeCol ? activeCol.name : "Collection";
     }
 
+    // Try to query thumbnail from active tab
+    let thumbnail = "";
+    try {
+      if (chrome.tabs && chrome.scripting && activeTab.id) {
+        const [res] = await chrome.scripting.executeScript({
+          target: { tabId: activeTab.id },
+          func: () => {
+            const ogImage = document.querySelector('meta[property="og:image"]');
+            if (ogImage && ogImage.content) return ogImage.content;
+            
+            const twitterImage = document.querySelector('meta[name="twitter:image"]');
+            if (twitterImage && twitterImage.content) return twitterImage.content;
+            
+            // Fallback to first high-res img
+            const imgs = Array.from(document.querySelectorAll('img'));
+            for (const img of imgs) {
+              if (img.src && img.src.startsWith('http') && img.width > 200 && img.height > 200) {
+                return img.src;
+              }
+            }
+            return "";
+          }
+        });
+        if (res && res.result) {
+          thumbnail = res.result;
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to extract thumbnail:", err);
+    }
+
     // Save item
     await DBService.addItem(
       targetCollectionId,
       activeTab.title,
       activeTab.url,
-      activeTab.favIconUrl || ""
+      activeTab.favIconUrl || "",
+      thumbnail
     );
     
     showToast(`Added to "${collectionName}"`);
@@ -1371,7 +1643,8 @@ function parseBackupFile(fileContent, filename) {
                   type: 'link',
                   title: item.title || item.name || item.url || item.link || "Untitled",
                   url: item.url || item.link,
-                  favicon: item.favicon || ""
+                  favicon: item.favicon || "",
+                  thumbnail: item.thumbnail || ""
                 };
               }
             });
@@ -1403,7 +1676,8 @@ function parseBackupFile(fileContent, filename) {
                   type: 'link',
                   title: item.title || item.name || item.url || item.link || "Untitled",
                   url: item.url || item.link,
-                  favicon: item.favicon || ""
+                  favicon: item.favicon || "",
+                  thumbnail: item.thumbnail || ""
                 };
               }
             });
@@ -1488,6 +1762,37 @@ function handleSearch(e) {
   } else if (currentView === 'detail') {
     // Re-render detail view which will automatically filter using cached activeCollectionItems
     renderCollectionDetails();
+  }
+}
+
+// Toggle Grid/List View
+function handleToggleView() {
+  const container = document.getElementById('items-container');
+  const icon = document.getElementById('view-toggle-icon');
+  
+  if (!container || !icon) return;
+  
+  const currentPref = localStorage.getItem('collections_view_pref') || 'list';
+  const newPref = currentPref === 'list' ? 'grid' : 'list';
+  
+  localStorage.setItem('collections_view_pref', newPref);
+  
+  updateViewPrefUI(newPref);
+}
+
+function updateViewPrefUI(pref) {
+  const container = document.getElementById('items-container');
+  const icon = document.getElementById('view-toggle-icon');
+  if (!container || !icon) return;
+  
+  if (pref === 'grid') {
+    container.classList.add('grid-view');
+    icon.innerHTML = '<path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/>';
+    icon.parentElement.title = "Switch to List View";
+  } else {
+    container.classList.remove('grid-view');
+    icon.innerHTML = '<path d="M4 11h5V5H4v6zm0 7h5v-6H4v6zm6 0h5v-6h-5v6zm6 0h5v-6h-5v6zm-6-7h5V5h-5v6zm6-6v6h5V5h-5z"/>';
+    icon.parentElement.title = "Switch to Grid View";
   }
 }
 
