@@ -193,6 +193,17 @@
           <p>Open any website in Edge and click "Add Current Tab" above to save it here.</p>
         </div>
       </section>
+
+      <!-- Search Results View (Hidden by default) -->
+      <section id="search-results-view" class="view-panel hidden">
+        <div class="search-results-header" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border-color);">
+          <h2 style="font-size: 14px; font-weight: 700; color: var(--text-primary);">Search Results</h2>
+          <button id="clear-search-btn" class="btn btn-secondary" style="font-size: 10px; padding: 2px 8px; height: 24px; min-width: auto;">Clear Search</button>
+        </div>
+        <div id="search-results-container" class="search-results-container" style="display: flex; flex-direction: column; gap: 16px;">
+          <!-- Dynamically populated search groups -->
+        </div>
+      </section>
     </main>
 
     <!-- Notification system for import/save feedback -->

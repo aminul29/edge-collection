@@ -12,6 +12,7 @@ let backDragTimeout = null;
 
 let selectionModeActive = false;
 let selectedItemIds = new Set();
+let preSearchView = null;
 
 const DB_NAME = 'CollectionsDB';
 const DB_VERSION = 1;
@@ -201,6 +202,18 @@ const DBService = {
       request.onerror = (e) => reject(e.target.error);
     });
   },
+
+  getAllItems() {
+    return new Promise((resolve, reject) => {
+      if (!db) return reject(new Error("Database not initialized"));
+      const transaction = db.transaction(['items'], 'readonly');
+      const store = transaction.objectStore('items');
+      const request = store.getAll();
+      request.onsuccess = (e) => resolve(e.target.result || []);
+      request.onerror = (e) => reject(e.target.error);
+    });
+  },
+
 
   addItem(collectionId, title, url, favicon, thumbnail) {
     return new Promise((resolve, reject) => {
@@ -554,6 +567,17 @@ function setupEventListeners() {
       document.getElementById('move-modal').classList.add('hidden');
     });
   }
+
+  const clearSearchBtn = document.getElementById('clear-search-btn');
+  if (clearSearchBtn) {
+    clearSearchBtn.addEventListener('click', () => {
+      const searchInput = document.getElementById('search-input');
+      if (searchInput) {
+        searchInput.value = '';
+        handleSearch({ target: searchInput });
+      }
+    });
+  }
   
   const createBtn = document.getElementById('create-collection-btn');
   const emptyCreateBtn = document.getElementById('empty-state-create-btn');
@@ -773,6 +797,10 @@ function setView(view, collectionId = null) {
   const addNoteBtn = document.getElementById('add-note-btn');
   const createCollectionBtn = document.getElementById('create-collection-btn');
   
+  const searchResultsPanel = document.getElementById('search-results-view');
+  if (searchResultsPanel) searchResultsPanel.classList.add('hidden');
+  
+  preSearchView = null;
   inlineForm.classList.add('hidden');
   searchInput.value = '';
 
@@ -1968,15 +1996,241 @@ function parseBackupFile(fileContent, filename) {
 }
 
 // --- Search Filter Handler ---
-function handleSearch(e) {
+async function handleSearch(e) {
   const query = e.target.value.toLowerCase().trim();
   
-  if (currentView === 'master') {
-    // Re-render master view which will automatically filter using cached collectionsList
-    renderCollectionsList();
-  } else if (currentView === 'detail') {
-    // Re-render detail view which will automatically filter using cached activeCollectionItems
-    renderCollectionDetails();
+  const masterPanel = document.getElementById('collections-list-view');
+  const detailPanel = document.getElementById('collection-items-view');
+  const searchResultsPanel = document.getElementById('search-results-view');
+  
+  if (!query) {
+    // Restore original view panel if we were in search
+    if (searchResultsPanel) searchResultsPanel.classList.add('hidden');
+    
+    if (preSearchView) {
+      currentView = preSearchView.view;
+      activeCollectionId = preSearchView.collectionId;
+      preSearchView = null;
+    }
+    
+    if (currentView === 'master') {
+      if (masterPanel) masterPanel.classList.remove('hidden');
+      if (detailPanel) detailPanel.classList.add('hidden');
+      renderCollectionsList();
+    } else {
+      if (masterPanel) masterPanel.classList.add('hidden');
+      if (detailPanel) detailPanel.classList.remove('hidden');
+      renderCollectionDetails();
+    }
+    return;
+  }
+  
+  // Save current view state before searching if not already saved
+  if (!preSearchView) {
+    preSearchView = { view: currentView, collectionId: activeCollectionId };
+  }
+  
+  // Transition to search results panel
+  if (masterPanel) masterPanel.classList.add('hidden');
+  if (detailPanel) detailPanel.classList.add('hidden');
+  if (searchResultsPanel) searchResultsPanel.classList.remove('hidden');
+  
+  try {
+    const allCollections = await DBService.getAllCollections();
+    const allItems = await DBService.getAllItems();
+    
+    // Filter matching collections
+    const matchingCols = allCollections.filter(col => col.name.toLowerCase().includes(query));
+    
+    // Filter matching items
+    const matchingItems = allItems.filter(item => {
+      if (item.type === 'note') {
+        return (item.content || "").toLowerCase().includes(query);
+      } else {
+        return (item.title || "").toLowerCase().includes(query) || (item.url || "").toLowerCase().includes(query);
+      }
+    });
+    
+    // Group matching items by collection
+    const groupedItems = {};
+    matchingItems.forEach(item => {
+      if (!groupedItems[item.collectionId]) {
+        groupedItems[item.collectionId] = [];
+      }
+      groupedItems[item.collectionId].push(item);
+    });
+    
+    renderSearchResults(matchingCols, groupedItems, allCollections, query);
+  } catch (err) {
+    console.error("Global search query error:", err);
+  }
+}
+
+function renderSearchResults(matchingCols, groupedItems, allCollections, query) {
+  const container = document.getElementById('search-results-container');
+  if (!container) return;
+  
+  container.innerHTML = '';
+  
+  const hasCols = matchingCols.length > 0;
+  const hasItems = Object.keys(groupedItems).length > 0;
+  
+  if (!hasCols && !hasItems) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon-wrapper">
+          <svg viewBox="0 0 24 24" width="48" height="48" class="empty-icon">
+            <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+          </svg>
+        </div>
+        <h3>No results found</h3>
+        <p>We couldn't find any collections or items matching "${escapeHTML(query)}".</p>
+      </div>
+    `;
+    return;
+  }
+  
+  // 1. Render Matching Collections
+  if (hasCols) {
+    const colSection = document.createElement('div');
+    colSection.className = 'search-results-section';
+    colSection.innerHTML = `<div class="search-section-title">Matching Collections</div>`;
+    
+    const listWrapper = document.createElement('div');
+    listWrapper.className = 'search-results-collections-list';
+    
+    matchingCols.forEach(col => {
+      const card = document.createElement('div');
+      card.className = `collection-card col-color-${col.color || 'blue'}`;
+      card.innerHTML = `
+        <div class="collection-card-left">
+          <div class="collection-icon-box">
+            <svg class="icon-inline" viewBox="0 0 24 24" width="20" height="20">
+              <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
+            </svg>
+          </div>
+          <div class="collection-info">
+            <span class="collection-name">${escapeHTML(col.name)}</span>
+            <span class="collection-count">${col.count} ${col.count === 1 ? 'item' : 'items'}</span>
+          </div>
+        </div>
+        <div class="collection-card-actions" style="opacity: 1;">
+          <span class="search-group-header-right">View</span>
+        </div>
+      `;
+      card.addEventListener('click', () => {
+        // Clear search input and open the collection
+        document.getElementById('search-input').value = '';
+        setView('detail', col.id);
+      });
+      listWrapper.appendChild(card);
+    });
+    
+    colSection.appendChild(listWrapper);
+    container.appendChild(colSection);
+  }
+  
+  // 2. Render Matching Items grouped by collection
+  if (hasItems) {
+    const itemsSection = document.createElement('div');
+    itemsSection.className = 'search-results-section';
+    itemsSection.innerHTML = `<div class="search-section-title">Matching Items</div>`;
+    
+    const groupsWrapper = document.createElement('div');
+    groupsWrapper.className = 'search-results-groups-list';
+    groupsWrapper.style.display = 'flex';
+    groupsWrapper.style.flexDirection = 'column';
+    groupsWrapper.style.gap = '12px';
+    
+    for (const colId in groupedItems) {
+      const col = allCollections.find(c => c.id === colId);
+      if (!col) continue;
+      
+      const groupEl = document.createElement('div');
+      groupEl.className = `search-group col-color-${col.color || 'blue'}`;
+      
+      const headerEl = document.createElement('div');
+      headerEl.className = 'search-group-header';
+      headerEl.innerHTML = `
+        <div class="search-group-header-left">
+          <svg viewBox="0 0 24 24" width="16" height="16">
+            <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
+          </svg>
+          <span>${escapeHTML(col.name)}</span>
+        </div>
+        <div class="search-group-header-right">Open</div>
+      `;
+      
+      headerEl.addEventListener('click', () => {
+        document.getElementById('search-input').value = '';
+        setView('detail', col.id);
+      });
+      groupEl.appendChild(headerEl);
+      
+      const itemsWrapper = document.createElement('div');
+      itemsWrapper.className = 'search-group-items';
+      
+      groupedItems[colId].forEach(item => {
+        if (item.type === 'note') {
+          // Render note card
+          const card = document.createElement('div');
+          card.className = `note-card note-${item.color || 'yellow'}`;
+          card.innerHTML = `
+            <div class="note-content" style="max-height: 80px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;">${escapeHTML(item.content)}</div>
+            <div class="note-footer" style="margin-top: 4px; font-size: 9px; color: var(--text-tertiary);">Note</div>
+          `;
+          card.addEventListener('click', () => {
+            // Take user to the collection detail view
+            document.getElementById('search-input').value = '';
+            setView('detail', col.id);
+          });
+          itemsWrapper.appendChild(card);
+        } else {
+          // Render link card
+          const card = document.createElement('div');
+          card.className = 'item-card';
+          const domain = getDomainName(item.url);
+          
+          let faviconSrc = "";
+          if (chrome.runtime && chrome.runtime.id) {
+            faviconSrc = `chrome-extension://${chrome.runtime.id}/_favicon/?pageUrl=${encodeURIComponent(item.url)}&size=32`;
+          } else {
+            faviconSrc = `https://www.google.com/s2/favicons?sz=64&domain=${domain}`;
+          }
+          
+          card.innerHTML = `
+            <img class="item-favicon" src="${faviconSrc}" alt="" onerror="this.src='https://www.google.com/s2/favicons?sz=64&domain=${domain}'; this.onerror=function(){ this.style.display='none'; this.nextElementSibling.style.display='inline-flex'; }" />
+            <div class="item-favicon-fallback" style="display:none; width:16px; height:16px; align-items:center; justify-content:center; background:var(--primary-light); color:var(--primary-color); border-radius:2px; font-size:10px; font-weight:bold; margin-top:3px; flex-shrink:0;">
+              ${domain ? domain[0].toUpperCase() : 'W'}
+            </div>
+            <div class="item-details" style="margin-left: 8px;">
+              <a class="item-title" href="${escapeHTML(item.url)}" target="_blank" title="${escapeHTML(item.title)}">${escapeHTML(item.title)}</a>
+              <div class="item-meta" style="font-size: 9px;">
+                <span class="item-domain">${escapeHTML(domain)}</span>
+              </div>
+            </div>
+          `;
+          
+          // Link clicks inside search opens link directly
+          card.addEventListener('click', (e) => {
+            if (e.target.closest('a')) return;
+            e.preventDefault();
+            if (chrome.tabs) {
+              chrome.tabs.create({ url: item.url });
+            } else {
+              window.open(item.url, '_blank');
+            }
+          });
+          itemsWrapper.appendChild(card);
+        }
+      });
+      
+      groupEl.appendChild(itemsWrapper);
+      groupsWrapper.appendChild(groupEl);
+    }
+    
+    itemsSection.appendChild(groupsWrapper);
+    container.appendChild(itemsSection);
   }
 }
 
