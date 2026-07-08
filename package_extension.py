@@ -2,7 +2,7 @@ import os
 import zipfile
 
 def package_extension():
-    zip_name = "edge-collections-sidebar-v1.0.6.zip"
+    zip_name = "edge-collections-sidebar-v1.0.8.zip"
     os.makedirs("dist", exist_ok=True)
     zip_path = os.path.join("dist", zip_name)
     

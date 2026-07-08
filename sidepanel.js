@@ -233,6 +233,8 @@ const DBService = {
         url: url,
         favicon: favicon || "",
         thumbnail: thumbnail || "",
+        linkNote: "",
+        itemTheme: "",
         type: "link",
         created: Date.now()
       };
@@ -255,6 +257,48 @@ const DBService = {
         const item = getReq.result;
         if (!item) return reject(new Error("Item not found"));
         item.thumbnail = thumbnail || "";
+
+        const updateReq = store.put(item);
+        updateReq.onsuccess = () => resolve(item);
+        updateReq.onerror = (e) => reject(e.target.error);
+      };
+      getReq.onerror = (e) => reject(e.target.error);
+    });
+  },
+
+  updateLinkNote(id, linkNote) {
+    return new Promise((resolve, reject) => {
+      if (!db) return reject(new Error("Database not initialized"));
+
+      const transaction = db.transaction(['items'], 'readwrite');
+      const store = transaction.objectStore('items');
+      const getReq = store.get(id);
+
+      getReq.onsuccess = () => {
+        const item = getReq.result;
+        if (!item) return reject(new Error("Link not found"));
+        item.linkNote = linkNote || "";
+
+        const updateReq = store.put(item);
+        updateReq.onsuccess = () => resolve(item);
+        updateReq.onerror = (e) => reject(e.target.error);
+      };
+      getReq.onerror = (e) => reject(e.target.error);
+    });
+  },
+
+  updateItemTheme(id, itemTheme) {
+    return new Promise((resolve, reject) => {
+      if (!db) return reject(new Error("Database not initialized"));
+
+      const transaction = db.transaction(['items'], 'readwrite');
+      const store = transaction.objectStore('items');
+      const getReq = store.get(id);
+
+      getReq.onsuccess = () => {
+        const item = getReq.result;
+        if (!item) return reject(new Error("Link not found"));
+        item.itemTheme = itemTheme || "";
 
         const updateReq = store.put(item);
         updateReq.onsuccess = () => resolve(item);
@@ -379,6 +423,8 @@ const DBService = {
             itemStoreObj.url = item.url;
             itemStoreObj.favicon = item.favicon || "";
             itemStoreObj.thumbnail = item.thumbnail || "";
+            itemStoreObj.linkNote = item.linkNote || "";
+            itemStoreObj.itemTheme = item.itemTheme || "";
           }
           
           itemStore.add(itemStoreObj);
@@ -427,7 +473,9 @@ const DBService = {
               title: item.title,
               url: item.url,
               favicon: item.favicon || "",
-              thumbnail: item.thumbnail || ""
+              thumbnail: item.thumbnail || "",
+              linkNote: item.linkNote || "",
+              itemTheme: item.itemTheme || ""
             });
           }
         });
@@ -1204,7 +1252,8 @@ async function renderCollectionDetails() {
         return (item.content || "").toLowerCase().includes(searchVal);
       } else {
         return (item.title || "").toLowerCase().includes(searchVal) || 
-               (item.url || "").toLowerCase().includes(searchVal);
+               (item.url || "").toLowerCase().includes(searchVal) ||
+               (item.linkNote || "").toLowerCase().includes(searchVal);
       }
     });
     
@@ -1348,7 +1397,7 @@ async function renderCollectionDetails() {
         container.appendChild(card);
       } else {
         const card = document.createElement('div');
-        card.className = 'item-card';
+        card.className = `item-card ${item.itemTheme ? `item-theme-${item.itemTheme}` : ''}`;
         card.dataset.id = item.id;
         
         const domain = getDomainName(item.url);
@@ -1394,13 +1443,32 @@ async function renderCollectionDetails() {
               <span>&bull;</span>
               <span class="item-date">${formattedDate}</span>
             </div>
+            <div class="link-note-preview ${item.linkNote ? '' : 'hidden'}">${escapeHTML(item.linkNote || '')}</div>
           </div>
           <div class="item-actions">
+            <button class="icon-button-small edit-link-note-btn ${item.linkNote ? 'has-note' : ''}" title="${item.linkNote ? 'Edit Tab Note' : 'Add Tab Note'}" data-id="${item.id}">
+              <svg viewBox="0 0 24 24" width="14" height="14">
+                <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25z"/>
+                <path d="M20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+              </svg>
+            </button>
+            <button class="icon-button-small change-item-theme-btn ${item.itemTheme ? 'has-theme' : ''}" title="Change Tab Color" data-id="${item.id}">
+              <svg viewBox="0 0 24 24" width="14" height="14">
+                <path d="M12 3a9 9 0 0 0 0 18c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zM6.5 12C5.67 12 5 11.33 5 10.5S5.67 9 6.5 9 8 9.67 8 10.5 7.33 12 6.5 12zm3-4C8.67 8 8 7.33 8 6.5S8.67 5 9.5 5s1.5.67 1.5 1.5S10.33 8 9.5 8zm5 0c-.83 0-1.5-.67-1.5-1.5S13.67 5 14.5 5s1.5.67 1.5 1.5S15.33 8 14.5 8zm3 4c-.83 0-1.5-.67-1.5-1.5S16.67 9 17.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>
+              </svg>
+            </button>
             <button class="icon-button-small delete-item-btn" title="Delete Link" data-id="${item.id}">
               <svg viewBox="0 0 24 24" width="14" height="14">
                 <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
               </svg>
             </button>
+          </div>
+          <div class="link-note-editor hidden">
+            <textarea class="link-note-input" maxlength="500" placeholder="Add a note for this saved tab...">${escapeHTML(item.linkNote || '')}</textarea>
+            <div class="link-note-actions">
+              <button class="btn btn-secondary cancel-link-note-btn">Cancel</button>
+              <button class="btn btn-primary save-link-note-btn">Save Note</button>
+            </div>
           </div>
         `;
         
@@ -1416,7 +1484,7 @@ async function renderCollectionDetails() {
             }
             return;
           }
-          if (e.target.closest('.delete-item-btn')) return;
+          if (e.target.closest('.delete-item-btn') || e.target.closest('.edit-link-note-btn') || e.target.closest('.change-item-theme-btn') || e.target.closest('.item-theme-popover') || e.target.closest('.link-note-editor')) return;
           if (window.getSelection().toString()) return; // Don't navigate if user is highlight-selecting title text
           
           e.preventDefault();
@@ -1432,6 +1500,109 @@ async function renderCollectionDetails() {
           checkboxEl.addEventListener('click', (e) => {
             e.stopPropagation();
             toggleItemSelection(item.id, checkboxEl.checked);
+          });
+        }
+
+        const noteEditor = card.querySelector('.link-note-editor');
+        const noteInput = card.querySelector('.link-note-input');
+        const notePreview = card.querySelector('.link-note-preview');
+        const editNoteBtn = card.querySelector('.edit-link-note-btn');
+
+        if (editNoteBtn && noteEditor && noteInput) {
+          editNoteBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            noteEditor.classList.toggle('hidden');
+            if (!noteEditor.classList.contains('hidden')) {
+              noteInput.focus();
+              noteInput.setSelectionRange(noteInput.value.length, noteInput.value.length);
+            }
+          });
+        }
+
+        const saveNoteBtn = card.querySelector('.save-link-note-btn');
+        if (saveNoteBtn && noteInput && noteEditor) {
+          saveNoteBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const newNote = noteInput.value.trim();
+            await DBService.updateLinkNote(item.id, newNote);
+            item.linkNote = newNote;
+
+            if (notePreview) {
+              notePreview.textContent = newNote;
+              notePreview.classList.toggle('hidden', !newNote);
+            }
+            if (editNoteBtn) {
+              editNoteBtn.classList.toggle('has-note', !!newNote);
+              editNoteBtn.title = newNote ? 'Edit Tab Note' : 'Add Tab Note';
+            }
+
+            noteEditor.classList.add('hidden');
+            showToast(newNote ? 'Tab note saved' : 'Tab note cleared');
+          });
+        }
+
+        const cancelNoteBtn = card.querySelector('.cancel-link-note-btn');
+        if (cancelNoteBtn && noteInput && noteEditor) {
+          cancelNoteBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            noteInput.value = item.linkNote || '';
+            noteEditor.classList.add('hidden');
+          });
+        }
+
+        if (noteInput) {
+          noteInput.addEventListener('click', (e) => e.stopPropagation());
+          noteInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+              noteInput.value = item.linkNote || '';
+              noteEditor.classList.add('hidden');
+              e.preventDefault();
+            }
+          });
+        }
+
+        const themeBtn = card.querySelector('.change-item-theme-btn');
+        if (themeBtn) {
+          themeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+
+            const existingPopover = card.querySelector('.item-theme-popover');
+            if (existingPopover) {
+              existingPopover.remove();
+              return;
+            }
+
+            document.querySelectorAll('.item-theme-popover').forEach(el => el.remove());
+            const popover = document.createElement('div');
+            popover.className = 'item-theme-popover';
+            const themes = [
+              { id: '', label: 'Default' },
+              { id: 'blue', label: 'Blue' },
+              { id: 'green', label: 'Green' },
+              { id: 'yellow', label: 'Yellow' },
+              { id: 'pink', label: 'Pink' },
+              { id: 'purple', label: 'Purple' }
+            ];
+
+            themes.forEach(theme => {
+              const btn = document.createElement('button');
+              btn.type = 'button';
+              btn.className = `item-theme-dot item-theme-dot-${theme.id || 'default'} ${(item.itemTheme || '') === theme.id ? 'active' : ''}`;
+              btn.title = theme.label;
+              btn.addEventListener('click', async (event) => {
+                event.stopPropagation();
+                await DBService.updateItemTheme(item.id, theme.id);
+                item.itemTheme = theme.id;
+
+                card.className = `item-card ${theme.id ? `item-theme-${theme.id}` : ''}`;
+                themeBtn.classList.toggle('has-theme', !!theme.id);
+                popover.remove();
+                showToast(theme.id ? `Tab color updated to ${theme.label}` : 'Tab color reset');
+              });
+              popover.appendChild(btn);
+            });
+
+            card.appendChild(popover);
           });
         }
         
@@ -2076,7 +2247,9 @@ function parseBackupFile(fileContent, filename) {
                   title: item.title || item.name || item.url || item.link || "Untitled",
                   url: item.url || item.link,
                   favicon: item.favicon || "",
-                  thumbnail: item.thumbnail || ""
+                  thumbnail: item.thumbnail || "",
+                  linkNote: item.linkNote || "",
+                  itemTheme: item.itemTheme || ""
                 };
               }
             });
@@ -2125,7 +2298,9 @@ function parseBackupFile(fileContent, filename) {
             return {
               title: item.title || item.name || item.url || item.link || "Untitled",
               url: item.url || item.link || "",
-              favicon: item.favicon || ""
+              favicon: item.favicon || "",
+              linkNote: item.linkNote || "",
+              itemTheme: item.itemTheme || ""
             };
           }
           return null;
@@ -2240,7 +2415,9 @@ async function handleSearch(e) {
         if (item.type === 'note') {
           return (item.content || "").toLowerCase().includes(query);
         } else {
-          return (item.title || "").toLowerCase().includes(query) || (item.url || "").toLowerCase().includes(query);
+          return (item.title || "").toLowerCase().includes(query) ||
+                 (item.url || "").toLowerCase().includes(query) ||
+                 (item.linkNote || "").toLowerCase().includes(query);
         }
       });
       
@@ -2261,7 +2438,9 @@ async function handleSearch(e) {
           if (item.type === 'note') {
             return (item.content || "").toLowerCase().includes(query);
           } else {
-            return (item.title || "").toLowerCase().includes(query) || (item.url || "").toLowerCase().includes(query);
+            return (item.title || "").toLowerCase().includes(query) ||
+                   (item.url || "").toLowerCase().includes(query) ||
+                   (item.linkNote || "").toLowerCase().includes(query);
           }
         });
         
@@ -2410,7 +2589,7 @@ function renderSearchResults(matchingCols, groupedItems, allCollections, query) 
         } else {
           // Render link card
           const card = document.createElement('div');
-          card.className = 'item-card';
+          card.className = `item-card ${item.itemTheme ? `item-theme-${item.itemTheme}` : ''}`;
           const domain = getDomainName(item.url);
           
           let faviconSrc = "";
@@ -2432,6 +2611,7 @@ function renderSearchResults(matchingCols, groupedItems, allCollections, query) 
               <div class="item-meta" style="font-size: 9px;">
                 <span class="item-domain">${escapeHTML(domain)}</span>
               </div>
+              <div class="link-note-preview ${item.linkNote ? '' : 'hidden'}">${escapeHTML(item.linkNote || '')}</div>
             </div>
           `;
           
@@ -2593,6 +2773,9 @@ async function handleBulkCopy() {
         lines.push(item.content || "");
       } else {
         lines.push(`[${item.title || "Untitled"}](${item.url})`);
+        if (item.linkNote) {
+          lines.push(`Note: ${item.linkNote}`);
+        }
       }
     }
   });

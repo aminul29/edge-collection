@@ -614,10 +614,70 @@ body {
   gap: 10px;
 }
 
+.item-card.item-theme-blue {
+  background-color: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.item-card.item-theme-green {
+  background-color: #ecfdf5;
+  border-color: #bbf7d0;
+}
+
+.item-card.item-theme-yellow {
+  background-color: #fffbeb;
+  border-color: #fde68a;
+}
+
+.item-card.item-theme-pink {
+  background-color: #fdf2f8;
+  border-color: #fbcfe8;
+}
+
+.item-card.item-theme-purple {
+  background-color: #f5f3ff;
+  border-color: #ddd6fe;
+}
+
+@media (prefers-color-scheme: dark) {
+  .item-card.item-theme-blue {
+    background-color: rgba(59, 130, 246, 0.1);
+    border-color: rgba(96, 165, 250, 0.35);
+  }
+
+  .item-card.item-theme-green {
+    background-color: rgba(16, 185, 129, 0.1);
+    border-color: rgba(52, 211, 153, 0.35);
+  }
+
+  .item-card.item-theme-yellow {
+    background-color: rgba(245, 158, 11, 0.1);
+    border-color: rgba(251, 191, 36, 0.35);
+  }
+
+  .item-card.item-theme-pink {
+    background-color: rgba(236, 72, 153, 0.1);
+    border-color: rgba(244, 114, 182, 0.35);
+  }
+
+  .item-card.item-theme-purple {
+    background-color: rgba(139, 92, 246, 0.1);
+    border-color: rgba(167, 139, 250, 0.35);
+  }
+}
+
 .item-card:hover {
   border-color: var(--border-hover);
   box-shadow: var(--shadow-md);
   background-color: var(--surface-hover);
+}
+
+.item-card.item-theme-blue:hover,
+.item-card.item-theme-green:hover,
+.item-card.item-theme-yellow:hover,
+.item-card.item-theme-pink:hover,
+.item-card.item-theme-purple:hover {
+  background-color: inherit;
 }
 
 .item-favicon {
@@ -675,7 +735,21 @@ body {
   white-space: nowrap;
 }
 
+.link-note-preview {
+  margin-top: 4px;
+  padding-left: 6px;
+  border-left: 2px solid var(--primary-color);
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
 .item-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   opacity: 0;
   transition: opacity var(--transition-fast);
   margin-left: auto;
@@ -684,6 +758,97 @@ body {
 
 .item-card:hover .item-actions {
   opacity: 1;
+}
+
+.edit-link-note-btn.has-note,
+.change-item-theme-btn.has-theme {
+  background-color: var(--primary-light);
+  color: var(--primary-color);
+}
+
+.item-theme-popover {
+  position: absolute;
+  top: 36px;
+  right: 8px;
+  z-index: 30;
+  display: flex;
+  gap: 6px;
+  padding: 7px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background-color: var(--surface-color);
+  box-shadow: var(--shadow-lg);
+}
+
+.item-theme-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1.5px solid transparent;
+  cursor: pointer;
+}
+
+.item-theme-dot:hover {
+  transform: scale(1.15);
+}
+
+.item-theme-dot.active {
+  border-color: var(--text-primary);
+  box-shadow: 0 0 0 2px var(--surface-color) inset;
+}
+
+.item-theme-dot-default {
+  background: linear-gradient(135deg, var(--surface-color) 0 46%, var(--border-hover) 46% 54%, var(--surface-color) 54% 100%);
+  border-color: var(--border-hover);
+}
+
+.item-theme-dot-blue { background-color: #bfdbfe; }
+.item-theme-dot-green { background-color: #bbf7d0; }
+.item-theme-dot-yellow { background-color: #fde68a; }
+.item-theme-dot-pink { background-color: #fbcfe8; }
+.item-theme-dot-purple { background-color: #ddd6fe; }
+
+.link-note-editor {
+  flex-basis: 100%;
+  width: 100%;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-color);
+}
+
+.link-note-input {
+  width: 100%;
+  min-height: 64px;
+  resize: vertical;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-color);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1.4;
+  outline: none;
+}
+
+.link-note-input:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px var(--primary-light);
+  background-color: var(--surface-color);
+}
+
+.link-note-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.link-note-actions .btn {
+  height: 28px;
+  min-width: auto;
+  padding: 0 10px;
+  font-size: 11px;
 }
 
 /* Toast Notifications */
@@ -1193,7 +1358,8 @@ body {
   border-radius: var(--radius-md);
   overflow: hidden;
   gap: 0;
-  height: 180px;
+  min-height: 180px;
+  height: auto;
   position: relative;
 }
 
@@ -1257,7 +1423,7 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  justify-content: flex-start;
   min-height: 0;
 }
 
@@ -1279,11 +1445,16 @@ body {
   gap: 4px;
   font-size: 9px;
   color: var(--text-tertiary);
-  margin-top: auto;
+  margin-top: 4px;
 }
 
 .items-list.grid-view .item-meta span:nth-child(2) {
   display: none; /* hide separator bullet */
+}
+
+.items-list.grid-view .link-note-preview {
+  margin-top: 4px;
+  font-size: 10px;
 }
 
 /* Floating delete action for grid view */
@@ -1291,32 +1462,83 @@ body {
   position: absolute;
   top: 6px;
   right: 6px;
-  opacity: 0;
+  opacity: 1;
   transition: opacity var(--transition-fast);
   z-index: 5;
+}
+
+.items-list.grid-view .item-actions {
+  display: flex;
+  gap: 4px;
 }
 
 .items-list.grid-view .item-card:hover .item-actions {
   opacity: 1;
 }
 
-.items-list.grid-view .delete-item-btn {
-  background-color: var(--surface-color);
+.items-list.grid-view .delete-item-btn,
+.items-list.grid-view .edit-link-note-btn,
+.items-list.grid-view .change-item-theme-btn {
+  background-color: rgba(255, 255, 255, 0.92);
   border: 1px solid var(--border-color);
   box-shadow: var(--shadow-sm);
   border-radius: 50%;
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-secondary);
+  color: #111827;
+}
+
+.items-list.grid-view .delete-item-btn svg,
+.items-list.grid-view .edit-link-note-btn svg,
+.items-list.grid-view .change-item-theme-btn svg {
+  width: 15px;
+  height: 15px;
+  fill: currentColor;
+}
+
+.items-list.grid-view .edit-link-note-btn.has-note,
+.items-list.grid-view .change-item-theme-btn.has-theme {
+  background-color: var(--primary-color);
+  color: #ffffff;
+  border-color: var(--primary-color);
 }
 
 .items-list.grid-view .delete-item-btn:hover {
   background-color: var(--danger-light);
   color: var(--danger-color);
   border-color: rgba(223, 26, 41, 0.2);
+}
+
+.items-list.grid-view .item-theme-popover {
+  top: 40px;
+  right: 6px;
+  flex-wrap: wrap;
+  width: 112px;
+}
+
+.items-list.grid-view .link-note-editor {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  margin: 0;
+  padding: 10px;
+  border-top: 0;
+  background-color: var(--surface-color);
+  display: flex;
+  flex-direction: column;
+}
+
+.items-list.grid-view .link-note-editor.hidden {
+  display: none !important;
+}
+
+.items-list.grid-view .link-note-input {
+  flex: 1;
+  min-height: 0;
+  resize: none;
 }
 
 /* Grid card overrides for note cards */
