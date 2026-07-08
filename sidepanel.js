@@ -16,6 +16,7 @@ let preSearchView = null;
 let isProUser = false;
 const GUMROAD_PRODUCT_ID = "OoY9cskAiTFzrZBCDYUDWw==";
 const GUMROAD_PRODUCT_URL = "https://aminulist0.gumroad.com/l/fzkozw";
+const MAX_LICENSE_USES = 1;
 
 const DB_NAME = 'CollectionsDB';
 const DB_VERSION = 1;
@@ -2568,6 +2569,11 @@ async function handleBulkMove() {
 }
 
 // --- Gumroad License Verification Service ---
+function getGumroadLicenseUses(purchase) {
+  const uses = Number(purchase && purchase.uses);
+  return Number.isFinite(uses) ? uses : 0;
+}
+
 async function verifyGumroadLicense(licenseKey, isSilent = false) {
   const statusMsg = document.getElementById('paywall-status-message');
   
@@ -2579,21 +2585,32 @@ async function verifyGumroadLicense(licenseKey, isSilent = false) {
   }
   
   try {
+    const requestBody = new URLSearchParams({
+      'product_id': GUMROAD_PRODUCT_ID,
+      'license_key': licenseKey.trim()
+    });
+
+    if (!isSilent) {
+      requestBody.set('increment_uses_count', 'true');
+    }
+
     const response = await fetch('https://api.gumroad.com/v2/licenses/verify', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded'
       },
-      body: new URLSearchParams({
-        'product_id': GUMROAD_PRODUCT_ID,
-        'license_key': licenseKey.trim(),
-        'increment_uses_count': 'true'
-      })
+      body: requestBody
     });
     
     const data = await response.json();
     
     if (data.success && data.purchase && !data.purchase.refunded && !data.purchase.chargebacked) {
+      const licenseUses = getGumroadLicenseUses(data.purchase);
+
+      if (licenseUses > MAX_LICENSE_USES) {
+        throw new Error('This license key has already been activated on another browser profile or device.');
+      }
+
       isProUser = true;
       if (chrome.storage && chrome.storage.local) {
         await chrome.storage.local.set({ proLicenseKey: licenseKey.trim(), isProUser: true });

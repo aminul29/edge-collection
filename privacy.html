@@ -60,7 +60,7 @@
   <p>The extension includes optional Pro features that require a license key purchased via Gumroad.</p>
   <ul>
     <li>To validate your license key, the extension makes a secure HTTPS connection directly to the <strong>Gumroad API</strong> (<code>https://api.gumroad.com</code>) using your license key.</li>
-    <li>This check only transmits the license key and the product identifier to verify ownership status. No browsing data, collections data, or personal details are transmitted during this validation check.</li>
+    <li>This check transmits the license key, product identifier, and an activation usage flag so Gumroad can limit one license key to one browser profile or device. No browsing data, collections data, or personal details are transmitted during this validation check.</li>
   </ul>
 
   <h2>3. Third-Party Services and CDNs</h2>

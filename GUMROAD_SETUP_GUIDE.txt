@@ -194,6 +194,11 @@ Gumroad responds with:
 If success=true and refunded=false → Pro features are unlocked and the
 key is saved in chrome.storage.local so the user stays Pro permanently.
 
+The extension allows one activation per license key. Manual activation sends
+increment_uses_count=true and rejects keys whose Gumroad purchase uses count is
+greater than 1. Startup re-checks validate the saved key without incrementing
+the usage count again.
+
 If the key is invalid, refunded, or charged-back → the error is shown
 in the paywall modal and access is denied.
 
