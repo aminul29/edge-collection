@@ -1580,21 +1580,65 @@ body {
 /* Detail View Color Picker */
 .detail-color-picker {
   display: inline-flex;
-  gap: 6px;
   align-items: center;
-  margin-left: 8px;
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
-  background-color: var(--bg-color);
-  border: 1px solid var(--border-color);
+  gap: 5px;
+  position: relative;
+  flex-shrink: 0;
+  margin-left: 4px;
 }
 
 .detail-color-label {
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-secondary);
+  line-height: 1;
   text-transform: uppercase;
-  margin-right: 2px;
+}
+
+.detail-color-menu-btn {
+  width: 48px;
+  height: 30px;
+  padding: 0 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-color);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.detail-color-menu-btn:hover {
+  background-color: var(--surface-hover);
+  border-color: var(--border-hover);
+  color: var(--text-primary);
+}
+
+.detail-color-current {
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  flex: 0 0 16px;
+  display: block;
+  box-sizing: border-box;
+  aspect-ratio: 1 / 1;
+  border-radius: 50%;
+  background-color: var(--col-accent, var(--primary-color));
+  border: 2px solid var(--surface-color);
+  box-shadow: 0 0 0 1px var(--border-hover);
+}
+
+.detail-color-menu-btn svg {
+  flex-shrink: 0;
+  fill: currentColor;
+}
+
+.detail-color-popover {
+  top: calc(100% + 6px);
+  right: 0;
 }
 
 /* Search Results Page Styling */
@@ -1717,6 +1761,3 @@ body {
   height: 24px;
   min-width: auto;
 }
-
-
-

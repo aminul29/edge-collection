@@ -242,6 +242,27 @@ const DBService = {
     });
   },
 
+  updateItemThumbnail(id, thumbnail) {
+    return new Promise((resolve, reject) => {
+      if (!db) return reject(new Error("Database not initialized"));
+
+      const transaction = db.transaction(['items'], 'readwrite');
+      const store = transaction.objectStore('items');
+      const getReq = store.get(id);
+
+      getReq.onsuccess = () => {
+        const item = getReq.result;
+        if (!item) return reject(new Error("Item not found"));
+        item.thumbnail = thumbnail || "";
+
+        const updateReq = store.put(item);
+        updateReq.onsuccess = () => resolve(item);
+        updateReq.onerror = (e) => reject(e.target.error);
+      };
+      getReq.onerror = (e) => reject(e.target.error);
+    });
+  },
+
   addNote(collectionId, content, color) {
     return new Promise((resolve, reject) => {
       if (!db) return reject(new Error("Database not initialized"));
@@ -1048,7 +1069,7 @@ async function renderCollectionDetails() {
   const titleHeading = document.getElementById('active-collection-name');
   
   // Apply Grid/List view preference layout class
-  const pref = localStorage.getItem('collections_view_pref') || 'list';
+  const pref = localStorage.getItem('collections_view_pref') || 'grid';
   updateViewPrefUI(pref);
   
   // Update select buttons visibility
@@ -1094,30 +1115,59 @@ async function renderCollectionDetails() {
     const detailColorPicker = document.getElementById('detail-color-picker');
     if (detailColorPicker) {
       detailColorPicker.innerHTML = '';
+      const colors = ['blue', 'purple', 'red', 'green', 'orange'];
+      const activeColor = activeCol.color || 'blue';
+
       const label = document.createElement('span');
       label.className = 'detail-color-label';
-      label.textContent = 'Theme:';
+      label.textContent = 'Theme';
       detailColorPicker.appendChild(label);
-      
-      const colors = ['blue', 'purple', 'red', 'green', 'orange'];
-      colors.forEach(color => {
-        const btn = document.createElement('button');
-        btn.className = `color-dot-btn btn-${color} ${activeCol.color === color || (!activeCol.color && color === 'blue') ? 'active' : ''}`;
-        btn.title = color.charAt(0).toUpperCase() + color.slice(1);
-        btn.addEventListener('click', async (e) => {
-          e.stopPropagation();
-          
-          if (!isProUser) {
-            showPaywallModal();
-            return;
-          }
-          
-          await DBService.updateCollectionColor(activeCol.id, color);
-          showToast(`Theme updated to ${color}`);
-          render();
+
+      const themeBtn = document.createElement('button');
+      themeBtn.className = `detail-color-menu-btn change-color-btn btn-${activeColor}`;
+      themeBtn.type = 'button';
+      themeBtn.title = 'Change collection theme';
+      themeBtn.setAttribute('aria-label', 'Change collection theme');
+      themeBtn.innerHTML = `
+        <span class="detail-color-current"></span>
+        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+          <path d="M7 10l5 5 5-5H7z"/>
+        </svg>
+      `;
+      themeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+
+        const existingPopover = detailColorPicker.querySelector('.color-picker-popover');
+        document.querySelectorAll('.color-picker-popover').forEach(el => el.remove());
+        if (existingPopover) return;
+
+        const popover = document.createElement('div');
+        popover.className = 'color-picker-popover detail-color-popover';
+
+        colors.forEach(color => {
+          const btn = document.createElement('button');
+          btn.className = `color-dot-btn btn-${color} ${activeColor === color ? 'active' : ''}`;
+          btn.title = color.charAt(0).toUpperCase() + color.slice(1);
+          btn.type = 'button';
+          btn.addEventListener('click', async (event) => {
+            event.stopPropagation();
+
+            if (!isProUser) {
+              showPaywallModal();
+              return;
+            }
+
+            await DBService.updateCollectionColor(activeCol.id, color);
+            showToast(`Theme updated to ${color}`);
+            render();
+          });
+          popover.appendChild(btn);
         });
-        detailColorPicker.appendChild(btn);
+
+        detailColorPicker.appendChild(popover);
       });
+
+      detailColorPicker.appendChild(themeBtn);
     }
 
     titleHeading.textContent = activeCol.name;
@@ -1518,6 +1568,74 @@ async function handleDeleteCollection() {
 }
 
 // Add Current Active Tab
+function resizeThumbnailDataUrl(dataUrl, maxWidth = 480, maxHeight = 270) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const sourceRatio = img.width / img.height;
+      const targetRatio = maxWidth / maxHeight;
+      let sourceWidth = img.width;
+      let sourceHeight = img.height;
+      let sourceX = 0;
+      let sourceY = 0;
+
+      if (sourceRatio > targetRatio) {
+        sourceWidth = img.height * targetRatio;
+        sourceX = (img.width - sourceWidth) / 2;
+      } else {
+        sourceHeight = img.width / targetRatio;
+        sourceY = (img.height - sourceHeight) / 2;
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = maxWidth;
+      canvas.height = maxHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, maxWidth, maxHeight);
+      resolve(canvas.toDataURL('image/jpeg', 0.72));
+    };
+    img.onerror = () => resolve("");
+    img.src = dataUrl;
+  });
+}
+
+async function captureActiveTabThumbnail(activeTab) {
+  if (!chrome.tabs || !chrome.tabs.captureVisibleTab || !activeTab || !activeTab.windowId) {
+    return "";
+  }
+
+  if (!activeTab.url || /^(edge|chrome|about|file):/i.test(activeTab.url)) {
+    return "";
+  }
+
+  try {
+    const screenshot = await chrome.tabs.captureVisibleTab(activeTab.windowId, {
+      format: 'jpeg',
+      quality: 70
+    });
+    return await resizeThumbnailDataUrl(screenshot);
+  } catch (err) {
+    console.warn("Failed to capture tab thumbnail:", err);
+
+    try {
+      if (chrome.permissions && chrome.permissions.request) {
+        const granted = await chrome.permissions.request({ origins: ['<all_urls>'] });
+        if (granted) {
+          const screenshot = await chrome.tabs.captureVisibleTab(activeTab.windowId, {
+            format: 'jpeg',
+            quality: 70
+          });
+          return await resizeThumbnailDataUrl(screenshot);
+        }
+      }
+    } catch (permissionErr) {
+      console.warn("Thumbnail permission or retry failed:", permissionErr);
+    }
+
+    return "";
+  }
+}
+
 async function handleAddCurrentTab() {
   const btn = document.getElementById('add-current-tab-btn');
   btn.disabled = true;
@@ -1572,10 +1690,11 @@ async function handleAddCurrentTab() {
       collectionName = activeCol ? activeCol.name : "Collection";
     }
 
-    // Try to query thumbnail from active tab
-    let thumbnail = "";
+    let thumbnail = await captureActiveTabThumbnail(activeTab);
+
+    // Fallback to page-provided thumbnail metadata when screenshot capture is unavailable.
     try {
-      if (chrome.tabs && chrome.scripting && activeTab.id) {
+      if (!thumbnail && chrome.tabs && chrome.scripting && activeTab.id) {
         const [res] = await chrome.scripting.executeScript({
           target: { tabId: activeTab.id },
           func: () => {
@@ -2349,7 +2468,7 @@ function handleToggleView() {
   
   if (!container || !icon) return;
   
-  const currentPref = localStorage.getItem('collections_view_pref') || 'list';
+  const currentPref = localStorage.getItem('collections_view_pref') || 'grid';
   const newPref = currentPref === 'list' ? 'grid' : 'list';
   
   localStorage.setItem('collections_view_pref', newPref);

@@ -108,7 +108,7 @@ Required to execute the local scraper script (bing_scraper.js) in the context of
 
 ### Host permission justification
 ```text
-https://*.bing.com/* is required to execute the scraping script on the bing.com/saves tab for importing existing collections. https://api.gumroad.com/* is required to communicate with the Gumroad licensing API to validate the user's Pro license key.
+<all_urls> is required to capture a small local screenshot thumbnail of the visible active tab when the user clicks "Add Tab". These thumbnails are stored locally with the saved collection item and are not transmitted to any server. https://*.bing.com/* is required to execute the scraping script on the bing.com/saves tab for importing existing collections. https://api.gumroad.com/* is required to communicate with the Gumroad licensing API to validate the user's Pro license key.
 ```
 
 ### Are you using remote code?
@@ -129,4 +129,3 @@ https://aminul29.github.io/edge-collection/privacy.html
 
 ### I certify that the following disclosures are true
 *Check **all three** certification checkboxes.*
-
