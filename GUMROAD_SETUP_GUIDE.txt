@@ -42,7 +42,7 @@ STEP 3: CREATE YOUR PRODUCT
 3. Fill in the following details:
 
    Name:        Edge Collections Sidebar Pro
-   Price:       $4.99  (one-time purchase)
+   Price:       $4.99  (early supporter lifetime license)
    Summary:     Unlock the full power of Edge Collections Sidebar.
    Description: (Use the text below)
 
@@ -53,7 +53,7 @@ STEP 3: CREATE YOUR PRODUCT
    ✔ Custom Color Themes    — Color-code your folders
    ✔ Global Omnisearch      — Search across ALL collections instantly
    ✔ Backup & Restore       — Import from file, clipboard, or Bing Saves
-   ✔ One-time purchase      — No subscriptions, yours forever
+   ✔ Early supporter lifetime license before yearly subscriptions begin
 
    After purchasing, you will receive a unique License Key in your email.
    Open the extension → click any Pro feature → paste your key → Activate!
@@ -210,7 +210,7 @@ SUMMARY CHECKLIST
 
   [ ]  Gumroad account created at gumroad.com
   [ ]  Payoneer account created and connected in Gumroad Settings → Payouts
-  [ ]  Product created with name, price ($4.99), and description
+  [ ]  Product created with name, price ($4.99), and early supporter lifetime license description
   [ ]  File uploaded (Thank-You.txt from the project folder)
   [ ]  "License key" module added via Content → Insert → License key
   [ ]  Product published (not Draft)

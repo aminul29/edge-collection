@@ -58,6 +58,7 @@ Whether you are conducting deep research, organizing project tasks, plan-making,
 ★ PRO WORKFLOW UPGRADES
 
 Get the most out of your sidebar with our optional Pro upgrade:
+Early supporter offer: Get Lifetime Pro before we move to yearly subscriptions.
 • Free users can create up to 5 collections with unlimited links, notes, imports, exports, and bulk actions.
 • Pro users unlock unlimited collections and the premium "Sync from Microsoft Edge Collections" feature.
 

@@ -217,6 +217,61 @@ body {
   animation: fadeIn var(--transition-normal);
 }
 
+/* In-product Pro promotion */
+.promo-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background-color: var(--surface-color);
+  border-top: 1px solid var(--border-color);
+  box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.promo-footer-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.promo-kicker {
+  font-size: 9px;
+  line-height: 1.2;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--primary-color);
+}
+
+.promo-message {
+  font-size: 11px;
+  line-height: 1.35;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.promo-footer-link {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  background-color: var(--primary-color);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.promo-footer-link:hover {
+  background-color: var(--primary-hover);
+}
+
 
 @keyframes fadeIn {
   from {
@@ -446,7 +501,7 @@ body {
   transition: all var(--transition-fast);
   box-shadow: var(--shadow-sm);
   position: relative;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .collection-card:hover {
@@ -504,6 +559,7 @@ body {
   opacity: 0;
   transition: opacity var(--transition-fast);
   z-index: 2;
+  position: relative;
 }
 
 .collection-card:hover .collection-card-actions {
@@ -1535,8 +1591,8 @@ body {
 /* Collection Card Color Picker Popover */
 .color-picker-popover {
   position: absolute;
-  top: calc(100% - 10px);
-  right: 12px;
+  top: calc(100% + 6px);
+  right: 0;
   background-color: var(--surface-color);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
@@ -1546,6 +1602,12 @@ body {
   gap: 6px;
   z-index: 999;
   animation: fadeIn var(--transition-fast);
+}
+
+.collection-color-popover {
+  top: auto;
+  bottom: calc(100% + 6px);
+  right: -6px;
 }
 
 @keyframes fadeIn {

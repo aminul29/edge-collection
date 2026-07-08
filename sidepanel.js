@@ -17,6 +17,7 @@ let isProUser = false;
 const GUMROAD_PRODUCT_ID = "OoY9cskAiTFzrZBCDYUDWw==";
 const GUMROAD_PRODUCT_URL = "https://aminulist0.gumroad.com/l/fzkozw";
 const MAX_LICENSE_USES = 1;
+const PROMO_FOOTER_DELAY_MS = 7 * 24 * 60 * 60 * 1000;
 
 const DB_NAME = 'CollectionsDB';
 const DB_VERSION = 1;
@@ -809,6 +810,11 @@ function setupEventListeners() {
     buyProBtn.href = GUMROAD_PRODUCT_URL;
   }
 
+  const promoFooterBuyBtn = document.getElementById('promo-footer-buy-btn');
+  if (promoFooterBuyBtn) {
+    promoFooterBuyBtn.href = GUMROAD_PRODUCT_URL;
+  }
+
   const closePaywallBtn = document.getElementById('close-paywall-modal-btn');
   if (closePaywallBtn) {
     closePaywallBtn.addEventListener('click', () => {
@@ -970,7 +976,8 @@ async function renderCollectionsList() {
             return;
           }
           
-          const existingPopover = card.querySelector('.color-picker-popover');
+          const actions = card.querySelector('.collection-card-actions');
+          const existingPopover = actions ? actions.querySelector('.color-picker-popover') : null;
           if (existingPopover) {
             existingPopover.remove();
             return;
@@ -979,7 +986,7 @@ async function renderCollectionsList() {
           document.querySelectorAll('.color-picker-popover').forEach(el => el.remove());
           
           const popover = document.createElement('div');
-          popover.className = 'color-picker-popover';
+          popover.className = 'color-picker-popover collection-color-popover';
           
           const colors = ['blue', 'purple', 'red', 'green', 'orange'];
           colors.forEach(color => {
@@ -995,7 +1002,9 @@ async function renderCollectionsList() {
             popover.appendChild(btn);
           });
           
-          card.appendChild(popover);
+          if (actions) {
+            actions.appendChild(popover);
+          }
         });
       }
       
@@ -2737,6 +2746,8 @@ async function verifyGumroadLicense(licenseKey, isSilent = false) {
         localStorage.setItem('proLicenseKey', licenseKey.trim());
         localStorage.setItem('isProUser', 'true');
       }
+
+      updatePromoFooterVisibility();
       
       if (!isSilent) {
         if (statusMsg) {
@@ -2757,6 +2768,7 @@ async function verifyGumroadLicense(licenseKey, isSilent = false) {
   } catch (err) {
     console.error("License verification failed:", err);
     isProUser = false;
+    updatePromoFooterVisibility();
     if (chrome.storage && chrome.storage.local) {
       await chrome.storage.local.remove(['proLicenseKey', 'isProUser']);
     } else {
@@ -2787,6 +2799,31 @@ async function checkProStatusOnStartup() {
   if (savedKey) {
     verifyGumroadLicense(savedKey, true);
   }
+
+  updatePromoFooterVisibility();
+}
+
+async function getInstallStartedAt() {
+  const storageKey = 'installedAt';
+  const now = Date.now();
+
+  if (chrome.storage && chrome.storage.local) {
+    const res = await chrome.storage.local.get([storageKey]);
+    if (Number.isFinite(res[storageKey])) {
+      return res[storageKey];
+    }
+
+    await chrome.storage.local.set({ [storageKey]: now });
+    return now;
+  }
+
+  const saved = Number(localStorage.getItem(storageKey));
+  if (Number.isFinite(saved) && saved > 0) {
+    return saved;
+  }
+
+  localStorage.setItem(storageKey, String(now));
+  return now;
 }
 
 function showPaywallModal() {
@@ -2796,6 +2833,15 @@ function showPaywallModal() {
   if (licenseInput) licenseInput.value = '';
   const modal = document.getElementById('paywall-modal');
   if (modal) modal.classList.remove('hidden');
+}
+
+async function updatePromoFooterVisibility() {
+  const promoFooter = document.getElementById('promo-footer');
+  if (!promoFooter) return;
+
+  const installedAt = await getInstallStartedAt();
+  const hasUsedForAWeek = Date.now() - installedAt >= PROMO_FOOTER_DELAY_MS;
+  promoFooter.classList.toggle('hidden', !!isProUser || !hasUsedForAWeek);
 }
 
 // --- Helper Functions ---
