@@ -254,13 +254,14 @@ const DBService = {
     return new Promise((resolve, reject) => {
       if (!db) return reject(new Error("Database not initialized"));
       
+      const cleanGroupId = (typeof groupId === 'string' && groupId.trim()) ? groupId.trim() : null;
       const transaction = db.transaction(['items'], 'readwrite');
       const store = transaction.objectStore('items');
       const now = Date.now();
       const item = {
         id: generateId(),
         collectionId: collectionId,
-        groupId: groupId || null,
+        groupId: cleanGroupId,
         title: title || "Untitled Page",
         url: url,
         favicon: favicon || "",
@@ -1013,7 +1014,7 @@ function setupEventListeners() {
   }
 
   // Action Bar Buttons
-  document.getElementById('add-current-tab-btn').addEventListener('click', handleAddCurrentTab);
+  document.getElementById('add-current-tab-btn').addEventListener('click', () => handleAddCurrentTab());
   
   const addNoteBtn = document.getElementById('add-note-btn');
   if (addNoteBtn) {
@@ -1845,6 +1846,11 @@ function renderTabGroupNode(groupNode, level = 0) {
     wrapper.style.setProperty('--group-accent', `var(--col-${groupNode.color})`);
   }
 
+  // Content body
+  const content = document.createElement('div');
+  const groupViewMode = groupNode.viewMode || 'list';
+  content.className = `tab-group-content ${groupViewMode === 'grid' ? 'grid-view' : 'list-view'}${groupNode.collapsed ? ' collapsed' : ''}`;
+
   const totalCount = getGroupTotalCount(groupNode);
 
   const header = document.createElement('div');
@@ -1911,14 +1917,25 @@ function renderTabGroupNode(groupNode, level = 0) {
     const newCollapsed = !groupNode.collapsed;
     groupNode.collapsed = newCollapsed;
     await DBService.toggleGroupCollapse(groupNode.id, newCollapsed);
-    const content = wrapper.querySelector('.tab-group-content');
-    if (content) content.classList.toggle('collapsed', newCollapsed);
+    content.classList.toggle('collapsed', newCollapsed);
     if (collapseBtn) {
       collapseBtn.classList.toggle('collapsed', newCollapsed);
       collapseBtn.title = newCollapsed ? "Expand group" : "Collapse group";
     }
   };
   collapseBtn.addEventListener('click', toggleCollapse);
+
+  // Clicking header area toggles collapse as well
+  header.addEventListener('click', (e) => {
+    if (e.target.closest('.tab-group-actions') || 
+        e.target.closest('.tab-group-color-indicator') || 
+        e.target.closest('.color-picker-popover') || 
+        e.target.closest('.tab-group-title-input') ||
+        e.target.closest('.tab-group-collapse-btn')) {
+      return;
+    }
+    toggleCollapse(e);
+  });
 
   // Rename Title
   const titleEl = header.querySelector('.tab-group-title');
@@ -2081,11 +2098,6 @@ function renderTabGroupNode(groupNode, level = 0) {
   });
 
   wrapper.appendChild(header);
-
-  // Content body
-  const content = document.createElement('div');
-  const groupViewMode = groupNode.viewMode || 'list';
-  content.className = `tab-group-content ${groupViewMode === 'grid' ? 'grid-view' : 'list-view'} ${groupNode.collapsed ? 'collapsed' : ''}`;
 
   // Recursively render child groups
   if (groupNode.childGroups && groupNode.childGroups.length > 0) {
@@ -2779,11 +2791,20 @@ async function handleAddCurrentTab(targetGroupId = null) {
       }
     } else {
       const collections = await DBService.getAllCollections();
-      const activeCol = collections.find(c => c.id === activeCollectionId);
+      let activeCol = collections.find(c => c.id === activeCollectionId);
+      if (!activeCol && collections.length > 0) {
+        activeCol = collections[0];
+        targetCollectionId = activeCol.id;
+      }
       collectionName = activeCol ? activeCol.name : "Collection";
     }
 
-    let thumbnail = await captureActiveTabThumbnail(activeTab);
+    let thumbnail = "";
+    try {
+      thumbnail = await captureActiveTabThumbnail(activeTab);
+    } catch (thumbErr) {
+      console.warn("Thumbnail capture error:", thumbErr);
+    }
 
     // Fallback to page-provided thumbnail metadata when screenshot capture is unavailable.
     try {
@@ -2815,27 +2836,49 @@ async function handleAddCurrentTab(targetGroupId = null) {
       console.warn("Failed to extract thumbnail:", err);
     }
 
-    let finalGroupId = targetGroupId;
+    const cleanGroupId = (typeof targetGroupId === 'string' && targetGroupId.trim()) ? targetGroupId.trim() : null;
+    let finalGroupId = cleanGroupId;
     let groupTitle = "";
 
     if (finalGroupId) {
-      const items = await DBService.getItems(targetCollectionId);
-      const grp = items.find(i => i.id === finalGroupId);
-      if (grp) groupTitle = grp.title;
+      const allItems = await DBService.getAllItems();
+      const grp = allItems.find(i => i.id === finalGroupId && i.type === 'group');
+      if (grp) {
+        targetCollectionId = grp.collectionId;
+        groupTitle = grp.title;
+
+        // Auto-expand this group and its parents so newly added tab is visible
+        if (grp.collapsed) {
+          await DBService.toggleGroupCollapse(grp.id, false);
+        }
+        let parentId = grp.parentGroupId;
+        while (parentId) {
+          const parent = allItems.find(i => i.id === parentId && i.type === 'group');
+          if (parent) {
+            if (parent.collapsed) {
+              await DBService.toggleGroupCollapse(parent.id, false);
+            }
+            parentId = parent.parentGroupId;
+          } else {
+            break;
+          }
+        }
+      }
     } else if (activeTab.groupId !== undefined && activeTab.groupId > -1 && chrome.tabGroups && chrome.tabGroups.get) {
       // Auto-detect browser tab group
       try {
         const bgGroup = await chrome.tabGroups.get(activeTab.groupId);
-        if (bgGroup && bgGroup.title) {
+        if (bgGroup) {
+          const bgTitle = (bgGroup.title && bgGroup.title.trim()) || 'Tab Group';
           const colItems = await DBService.getItems(targetCollectionId);
-          let matchGroup = colItems.find(i => i.type === 'group' && i.title.toLowerCase() === bgGroup.title.trim().toLowerCase());
+          let matchGroup = colItems.find(i => i.type === 'group' && i.title.toLowerCase() === bgTitle.toLowerCase());
           if (!matchGroup) {
             const colorMap = {
               'grey': 'blue', 'blue': 'blue', 'red': 'red', 'yellow': 'orange',
               'green': 'green', 'pink': 'red', 'purple': 'purple', 'cyan': 'blue', 'orange': 'orange'
             };
             const grpColor = colorMap[bgGroup.color] || 'blue';
-            matchGroup = await DBService.addGroup(targetCollectionId, bgGroup.title.trim(), null, grpColor);
+            matchGroup = await DBService.addGroup(targetCollectionId, bgTitle, null, grpColor);
           }
           finalGroupId = matchGroup.id;
           groupTitle = matchGroup.title;
@@ -2863,11 +2906,11 @@ async function handleAddCurrentTab(targetGroupId = null) {
     
     // If in Master View, dynamically refresh the count on card. 
     // If in Detail View, dynamically render the new item.
-    render();
+    await render();
     
   } catch (err) {
     console.error("Add current tab error:", err);
-    showToast("Error saving current tab.");
+    showToast(`Error saving current tab: ${err && err.message ? err.message : err}`);
   } finally {
     if (btn) btn.disabled = false;
   }

@@ -2258,6 +2258,7 @@ body {
     }
 
     svg {
+      pointer-events: none;
       transition: transform var(--transition-fast);
     }
 
@@ -2557,6 +2558,12 @@ body {
       color: var(--primary-color);
       background-color: var(--primary-light);
     }
+  }
+
+  &.collapsed,
+  &.collapsed.list-view,
+  &.collapsed.grid-view {
+    display: none;
   }
 }
 
