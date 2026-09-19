@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Edge Collections Sidebar",
-  "version": "1.0.9",
+  "version": "1.1.0",
   "description": "Organize your saved pages, links, and notes in a clean, convenient sidebar. Import, export, and manage your collections with ease.",
   "minimum_chrome_version": "114.0",
   "icons": {
@@ -21,7 +21,8 @@
   "host_permissions": [
     "<all_urls>",
     "https://*.bing.com/*",
-    "https://api.gumroad.com/*"
+    "https://api.gumroad.com/*",
+    "https://vvrglnsrgbvmjllmnhrl.supabase.co/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -39,6 +40,6 @@
     "default_path": "sidepanel.html"
   },
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://api.gumroad.com;"
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://api.gumroad.com https://vvrglnsrgbvmjllmnhrl.supabase.co wss://vvrglnsrgbvmjllmnhrl.supabase.co;"
   }
 }

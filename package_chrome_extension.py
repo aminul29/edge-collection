@@ -27,6 +27,8 @@ def package_chrome_extension():
     include_files = [
         "background.js",
         "bing_scraper.js",
+        "supabase_client.js",
+        "sync_service.js",
         "sidepanel.js",
         "sidepanel.html",
         "sidepanel.css",

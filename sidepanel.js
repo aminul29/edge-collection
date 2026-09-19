@@ -111,11 +111,15 @@ const DBService = {
       const collection = {
         id: generateId(),
         name: name,
-        created: Date.now()
+        created: Date.now(),
+        updated: Date.now()
       };
       
       const request = store.add(collection);
-      request.onsuccess = () => resolve(collection);
+      request.onsuccess = () => {
+        if (typeof SyncService !== 'undefined') SyncService.scheduleSync();
+        resolve(collection);
+      };
       request.onerror = (e) => reject(e.target.error);
     });
   },
@@ -132,8 +136,12 @@ const DBService = {
         const col = getReq.result;
         if (!col) return reject(new Error("Collection not found"));
         col.name = newName;
+        col.updated = Date.now();
         const updateReq = store.put(col);
-        updateReq.onsuccess = () => resolve(col);
+        updateReq.onsuccess = () => {
+          if (typeof SyncService !== 'undefined') SyncService.scheduleSync();
+          resolve(col);
+        };
         updateReq.onerror = (e) => reject(e.target.error);
       };
       getReq.onerror = (e) => reject(e.target.error);
@@ -152,8 +160,12 @@ const DBService = {
         const col = getReq.result;
         if (!col) return reject(new Error("Collection not found"));
         col.color = color;
+        col.updated = Date.now();
         const updateReq = store.put(col);
-        updateReq.onsuccess = () => resolve(col);
+        updateReq.onsuccess = () => {
+          if (typeof SyncService !== 'undefined') SyncService.scheduleSync();
+          resolve(col);
+        };
         updateReq.onerror = (e) => reject(e.target.error);
       };
       getReq.onerror = (e) => reject(e.target.error);
@@ -162,13 +174,28 @@ const DBService = {
 
 
   deleteCollection(id) {
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
       if (!db) return reject(new Error("Database not initialized"));
       
+      try {
+        if (typeof TombstoneService !== 'undefined') {
+          await TombstoneService.addCollectionTombstone(id);
+          const allItems = await DBService.getItems(id);
+          for (const item of allItems) {
+            await TombstoneService.addItemTombstone(item.id);
+          }
+        }
+      } catch (e) {
+        console.warn('Could not record tombstones for collection deletion:', e);
+      }
+
       const transaction = db.transaction(['collections', 'items'], 'readwrite');
       
       transaction.onerror = (e) => reject(e.target.error);
-      transaction.oncomplete = () => resolve();
+      transaction.oncomplete = () => {
+        if (typeof SyncService !== 'undefined') SyncService.scheduleSync();
+        resolve();
+      };
       
       const colStore = transaction.objectStore('collections');
       colStore.delete(id);
@@ -229,6 +256,7 @@ const DBService = {
       
       const transaction = db.transaction(['items'], 'readwrite');
       const store = transaction.objectStore('items');
+      const now = Date.now();
       const item = {
         id: generateId(),
         collectionId: collectionId,
@@ -240,11 +268,15 @@ const DBService = {
         linkNote: "",
         itemTheme: "",
         type: "link",
-        created: Date.now()
+        created: now,
+        updated: now
       };
       
       const request = store.add(item);
-      request.onsuccess = () => resolve(item);
+      request.onsuccess = () => {
+        if (typeof SyncService !== 'undefined') SyncService.scheduleSync();
+        resolve(item);
+      };
       request.onerror = (e) => reject(e.target.error);
     });
   },
@@ -261,9 +293,13 @@ const DBService = {
         const item = getReq.result;
         if (!item) return reject(new Error("Item not found"));
         item.thumbnail = thumbnail || "";
+        item.updated = Date.now();
 
         const updateReq = store.put(item);
-        updateReq.onsuccess = () => resolve(item);
+        updateReq.onsuccess = () => {
+          if (typeof SyncService !== 'undefined') SyncService.scheduleSync();
+          resolve(item);
+        };
         updateReq.onerror = (e) => reject(e.target.error);
       };
       getReq.onerror = (e) => reject(e.target.error);
@@ -282,9 +318,13 @@ const DBService = {
         const item = getReq.result;
         if (!item) return reject(new Error("Link not found"));
         item.linkNote = linkNote || "";
+        item.updated = Date.now();
 
         const updateReq = store.put(item);
-        updateReq.onsuccess = () => resolve(item);
+        updateReq.onsuccess = () => {
+          if (typeof SyncService !== 'undefined') SyncService.scheduleSync();
+          resolve(item);
+        };
         updateReq.onerror = (e) => reject(e.target.error);
       };
       getReq.onerror = (e) => reject(e.target.error);
@@ -303,9 +343,13 @@ const DBService = {
         const item = getReq.result;
         if (!item) return reject(new Error("Link not found"));
         item.itemTheme = itemTheme || "";
+        item.updated = Date.now();
 
         const updateReq = store.put(item);
-        updateReq.onsuccess = () => resolve(item);
+        updateReq.onsuccess = () => {
+          if (typeof SyncService !== 'undefined') SyncService.scheduleSync();
+          resolve(item);
+        };
         updateReq.onerror = (e) => reject(e.target.error);
       };
       getReq.onerror = (e) => reject(e.target.error);
@@ -318,6 +362,7 @@ const DBService = {
       
       const transaction = db.transaction(['items'], 'readwrite');
       const store = transaction.objectStore('items');
+      const now = Date.now();
       const item = {
         id: generateId(),
         collectionId: collectionId,
@@ -325,11 +370,15 @@ const DBService = {
         type: "note",
         content: content || "",
         color: color || "yellow",
-        created: Date.now()
+        created: now,
+        updated: now
       };
       
       const request = store.add(item);
-      request.onsuccess = () => resolve(item);
+      request.onsuccess = () => {
+        if (typeof SyncService !== 'undefined') SyncService.scheduleSync();
+        resolve(item);
+      };
       request.onerror = (e) => reject(e.target.error);
     });
   },
@@ -346,8 +395,12 @@ const DBService = {
         const item = getReq.result;
         if (!item) return reject(new Error("Note not found"));
         item.content = newContent;
+        item.updated = Date.now();
         const updateReq = store.put(item);
-        updateReq.onsuccess = () => resolve(item);
+        updateReq.onsuccess = () => {
+          if (typeof SyncService !== 'undefined') SyncService.scheduleSync();
+          resolve(item);
+        };
         updateReq.onerror = (e) => reject(e.target.error);
       };
       getReq.onerror = (e) => reject(e.target.error);
@@ -366,8 +419,12 @@ const DBService = {
         const item = getReq.result;
         if (!item) return reject(new Error("Note not found"));
         item.color = newColor;
+        item.updated = Date.now();
         const updateReq = store.put(item);
-        updateReq.onsuccess = () => resolve(item);
+        updateReq.onsuccess = () => {
+          if (typeof SyncService !== 'undefined') SyncService.scheduleSync();
+          resolve(item);
+        };
         updateReq.onerror = (e) => reject(e.target.error);
       };
       getReq.onerror = (e) => reject(e.target.error);
@@ -375,14 +432,25 @@ const DBService = {
   },
 
   deleteItem(id) {
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
       if (!db) return reject(new Error("Database not initialized"));
       
+      try {
+        if (typeof TombstoneService !== 'undefined') {
+          await TombstoneService.addItemTombstone(id);
+        }
+      } catch (e) {
+        console.warn('Could not record item tombstone:', e);
+      }
+
       const transaction = db.transaction(['items'], 'readwrite');
       const store = transaction.objectStore('items');
       const request = store.delete(id);
       
-      request.onsuccess = () => resolve();
+      request.onsuccess = () => {
+        if (typeof SyncService !== 'undefined') SyncService.scheduleSync();
+        resolve();
+      };
       request.onerror = (e) => reject(e.target.error);
     });
   },
@@ -393,6 +461,7 @@ const DBService = {
       
       const transaction = db.transaction(['items'], 'readwrite');
       const store = transaction.objectStore('items');
+      const now = Date.now();
       const group = {
         id: 'grp_' + generateId(),
         collectionId: collectionId,
@@ -402,11 +471,15 @@ const DBService = {
         color: color || 'blue',
         collapsed: false,
         viewMode: viewMode || 'list',
-        created: Date.now()
+        created: now,
+        updated: now
       };
       
       const request = store.add(group);
-      request.onsuccess = () => resolve(group);
+      request.onsuccess = () => {
+        if (typeof SyncService !== 'undefined') SyncService.scheduleSync();
+        resolve(group);
+      };
       request.onerror = (e) => reject(e.target.error);
     });
   },
@@ -423,8 +496,12 @@ const DBService = {
         const group = getReq.result;
         if (!group) return reject(new Error("Group not found"));
         group.viewMode = newViewMode;
+        group.updated = Date.now();
         const updateReq = store.put(group);
-        updateReq.onsuccess = () => resolve(group);
+        updateReq.onsuccess = () => {
+          if (typeof SyncService !== 'undefined') SyncService.scheduleSync();
+          resolve(group);
+        };
         updateReq.onerror = (e) => reject(e.target.error);
       };
       getReq.onerror = (e) => reject(e.target.error);
@@ -443,8 +520,12 @@ const DBService = {
         const group = getReq.result;
         if (!group) return reject(new Error("Group not found"));
         group.title = newTitle;
+        group.updated = Date.now();
         const updateReq = store.put(group);
-        updateReq.onsuccess = () => resolve(group);
+        updateReq.onsuccess = () => {
+          if (typeof SyncService !== 'undefined') SyncService.scheduleSync();
+          resolve(group);
+        };
         updateReq.onerror = (e) => reject(e.target.error);
       };
       getReq.onerror = (e) => reject(e.target.error);
@@ -463,8 +544,12 @@ const DBService = {
         const group = getReq.result;
         if (!group) return reject(new Error("Group not found"));
         group.color = newColor;
+        group.updated = Date.now();
         const updateReq = store.put(group);
-        updateReq.onsuccess = () => resolve(group);
+        updateReq.onsuccess = () => {
+          if (typeof SyncService !== 'undefined') SyncService.scheduleSync();
+          resolve(group);
+        };
         updateReq.onerror = (e) => reject(e.target.error);
       };
       getReq.onerror = (e) => reject(e.target.error);
@@ -483,8 +568,12 @@ const DBService = {
         const group = getReq.result;
         if (!group) return reject(new Error("Group not found"));
         group.collapsed = collapsed !== undefined ? collapsed : !group.collapsed;
+        group.updated = Date.now();
         const updateReq = store.put(group);
-        updateReq.onsuccess = () => resolve(group);
+        updateReq.onsuccess = () => {
+          if (typeof SyncService !== 'undefined') SyncService.scheduleSync();
+          resolve(group);
+        };
         updateReq.onerror = (e) => reject(e.target.error);
       };
       getReq.onerror = (e) => reject(e.target.error);
@@ -500,6 +589,10 @@ const DBService = {
         const targetGroup = allItems.find(i => i.id === id && i.type === 'group');
         const parentId = targetGroup ? targetGroup.parentGroupId : null;
         
+        if (typeof TombstoneService !== 'undefined') {
+          await TombstoneService.addItemTombstone(id);
+        }
+
         const transaction = db.transaction(['items'], 'readwrite');
         const store = transaction.objectStore('items');
         
@@ -516,25 +609,33 @@ const DBService = {
             });
           }
           
-          allItems.forEach(i => {
+          for (const i of allItems) {
             if (groupsToDelete.has(i.id) || (i.groupId && groupsToDelete.has(i.groupId))) {
               store.delete(i.id);
+              if (typeof TombstoneService !== 'undefined') {
+                await TombstoneService.addItemTombstone(i.id);
+              }
             }
-          });
+          }
         } else {
           allItems.forEach(i => {
             if (i.groupId === id) {
               i.groupId = parentId || null;
+              i.updated = Date.now();
               store.put(i);
             } else if (i.type === 'group' && i.parentGroupId === id) {
               i.parentGroupId = parentId || null;
+              i.updated = Date.now();
               store.put(i);
             }
           });
           store.delete(id);
         }
         
-        transaction.oncomplete = () => resolve();
+        transaction.oncomplete = () => {
+          if (typeof SyncService !== 'undefined') SyncService.scheduleSync();
+          resolve();
+        };
         transaction.onerror = (e) => reject(e.target.error);
       } catch (err) {
         reject(err);
@@ -554,9 +655,13 @@ const DBService = {
         const item = getReq.result;
         if (!item) return reject(new Error("Item not found"));
         item.groupId = targetGroupId || null;
+        item.updated = Date.now();
         delete item.sortOrder;
         const updateReq = store.put(item);
-        updateReq.onsuccess = () => resolve(item);
+        updateReq.onsuccess = () => {
+          if (typeof SyncService !== 'undefined') SyncService.scheduleSync();
+          resolve(item);
+        };
         updateReq.onerror = (e) => reject(e.target.error);
       };
       getReq.onerror = (e) => reject(e.target.error);
@@ -588,9 +693,13 @@ const DBService = {
           const group = getReq.result;
           if (!group) return reject(new Error("Group not found"));
           group.parentGroupId = targetParentGroupId || null;
+          group.updated = Date.now();
           delete group.sortOrder;
           const updateReq = store.put(group);
-          updateReq.onsuccess = () => resolve(group);
+          updateReq.onsuccess = () => {
+            if (typeof SyncService !== 'undefined') SyncService.scheduleSync();
+            resolve(group);
+          };
           updateReq.onerror = (e) => reject(e.target.error);
         };
         getReq.onerror = (e) => reject(e.target.error);
@@ -758,11 +867,14 @@ async function reorderCollections(draggedId, targetId) {
   
   const transaction = db.transaction(['collections'], 'readwrite');
   const store = transaction.objectStore('collections');
+  const now = Date.now();
   
   for (let i = 0; i < collections.length; i++) {
     collections[i].sortOrder = i;
+    collections[i].updated = now;
     store.put(collections[i]);
   }
+  if (typeof SyncService !== 'undefined') SyncService.scheduleSync();
 }
 
 async function reorderItems(collectionId, draggedId, targetId) {
@@ -783,11 +895,14 @@ async function reorderItems(collectionId, draggedId, targetId) {
   
   const transaction = db.transaction(['items'], 'readwrite');
   const store = transaction.objectStore('items');
+  const now = Date.now();
   
   for (let i = 0; i < items.length; i++) {
     items[i].sortOrder = i;
+    items[i].updated = now;
     store.put(items[i]);
   }
+  if (typeof SyncService !== 'undefined') SyncService.scheduleSync();
 }
 
 async function moveItemToCollection(itemId, targetCollectionId) {
@@ -802,10 +917,14 @@ async function moveItemToCollection(itemId, targetCollectionId) {
       if (!item) return reject(new Error("Item not found"));
       
       item.collectionId = targetCollectionId;
+      item.updated = Date.now();
       delete item.sortOrder; // falls back to newest inside the target collection
       
       const updateReq = store.put(item);
-      updateReq.onsuccess = () => resolve(item);
+      updateReq.onsuccess = () => {
+        if (typeof SyncService !== 'undefined') SyncService.scheduleSync();
+        resolve(item);
+      };
       updateReq.onerror = (e) => reject(e.target.error);
     };
     getReq.onerror = (e) => reject(e.target.error);
@@ -820,6 +939,11 @@ async function initApp() {
     await DBService.init();
     await checkProStatusOnStartup();
     
+    if (typeof SupabaseClient !== 'undefined') {
+      await SupabaseClient.init();
+    }
+    initCloudSyncUI();
+
     // Check if the pin extension banner should be shown
     if (!localStorage.getItem('pin-banner-dismissed')) {
       const banner = document.getElementById('pin-extension-banner');
@@ -829,6 +953,10 @@ async function initApp() {
     }
 
     await render();
+
+    if (typeof SupabaseClient !== 'undefined' && SupabaseClient.isAuthenticated() && typeof SyncService !== 'undefined') {
+      SyncService.sync().catch(err => console.warn('Initial cloud sync failed:', err));
+    }
   } catch (err) {
     console.error("Initialization failed:", err);
     showToast("Error initializing local storage.");
@@ -4101,3 +4229,290 @@ if (chrome.runtime && chrome.runtime.onMessage) {
     }
   });
 }
+
+// --- Cloud Sync UI and Event Handlers ---
+function initCloudSyncUI() {
+  const syncBtn = document.getElementById('cloud-sync-status-btn');
+  const syncDot = document.getElementById('sync-status-dot');
+  const menuCloudBtn = document.getElementById('menu-cloud-account');
+  const cloudModal = document.getElementById('cloud-account-modal');
+  const closeCloudModalBtn = document.getElementById('close-cloud-modal-btn');
+  
+  const authView = document.getElementById('cloud-auth-view');
+  const dashboardView = document.getElementById('cloud-dashboard-view');
+  
+  const tabSignin = document.getElementById('cloud-tab-signin');
+  const tabSignup = document.getElementById('cloud-tab-signup');
+  const signinForm = document.getElementById('cloud-signin-form');
+  const signupForm = document.getElementById('cloud-signup-form');
+  
+  const signinStatus = document.getElementById('cloud-signin-status');
+  const signupStatus = document.getElementById('cloud-signup-status');
+  const dashboardStatus = document.getElementById('cloud-dashboard-status');
+  
+  const userEmailText = document.getElementById('cloud-user-email-text');
+  const lastSyncedTime = document.getElementById('cloud-last-synced-time');
+  const syncNowBtn = document.getElementById('cloud-sync-now-btn');
+  const signoutBtn = document.getElementById('cloud-signout-btn');
+
+  function updateSyncIndicator(state) {
+    if (!syncDot || !syncBtn) return;
+    const isAuthed = typeof SupabaseClient !== 'undefined' && SupabaseClient.isAuthenticated();
+    syncDot.className = 'sync-status-dot';
+    syncBtn.classList.remove('syncing');
+
+    if (!isAuthed) {
+      syncDot.classList.add('unauthenticated');
+      syncBtn.title = 'Cloud Sync & Account (Click to Sign In)';
+      return;
+    }
+
+    if (state && state.status === 'syncing') {
+      syncDot.classList.add('syncing');
+      syncBtn.classList.add('syncing');
+      syncBtn.title = 'Syncing collections with cloud...';
+    } else if (state && state.status === 'error') {
+      syncDot.classList.add('error');
+      syncBtn.title = `Sync error: ${state.error || 'Check details'}`;
+    } else if (state && state.status === 'offline') {
+      syncDot.classList.add('offline');
+      syncBtn.title = 'Offline - Sync paused';
+    } else {
+      syncDot.classList.add('idle');
+      syncBtn.title = 'Cloud Sync: Up to date';
+    }
+  }
+
+  if (typeof SyncService !== 'undefined') {
+    SyncService.addListener(updateSyncIndicator);
+    updateSyncIndicator(SyncService.getStatus());
+  }
+
+  async function refreshModalState() {
+    if (!cloudModal) return;
+    const isAuthed = typeof SupabaseClient !== 'undefined' && SupabaseClient.isAuthenticated();
+    
+    if (isAuthed) {
+      const user = await SupabaseClient.getUser();
+      if (authView) authView.classList.add('hidden');
+      if (dashboardView) dashboardView.classList.remove('hidden');
+      if (userEmailText) userEmailText.textContent = user ? user.email : 'Pro User';
+      
+      const lastSync = await SyncService.getLastSyncTime();
+      if (lastSyncedTime) {
+        lastSyncedTime.textContent = lastSync ? new Date(lastSync).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', ' + new Date(lastSync).toLocaleDateString() : 'Never';
+      }
+      if (dashboardStatus) {
+        dashboardStatus.className = 'cloud-status-msg hidden';
+        dashboardStatus.textContent = '';
+      }
+    } else {
+      if (authView) authView.classList.remove('hidden');
+      if (dashboardView) dashboardView.classList.add('hidden');
+      
+      // Auto-populate license key if user is already Pro locally
+      const licenseInput = document.getElementById('cloud-signup-license');
+      if (licenseInput) {
+        let savedKey = '';
+        if (chrome.storage && chrome.storage.local) {
+          const res = await chrome.storage.local.get(['proLicenseKey']);
+          savedKey = res.proLicenseKey || '';
+        } else {
+          savedKey = localStorage.getItem('proLicenseKey') || '';
+        }
+        if (savedKey) licenseInput.value = savedKey;
+      }
+    }
+  }
+
+  function openCloudModal() {
+    if (cloudModal) {
+      cloudModal.classList.remove('hidden');
+      refreshModalState();
+    }
+  }
+
+  if (syncBtn) {
+    syncBtn.addEventListener('click', openCloudModal);
+  }
+
+  if (menuCloudBtn) {
+    menuCloudBtn.addEventListener('click', () => {
+      const menu = document.getElementById('more-actions-menu');
+      if (menu) menu.classList.add('hidden');
+      openCloudModal();
+    });
+  }
+
+  if (closeCloudModalBtn) {
+    closeCloudModalBtn.addEventListener('click', () => {
+      if (cloudModal) cloudModal.classList.add('hidden');
+    });
+  }
+
+  if (cloudModal) {
+    cloudModal.addEventListener('click', (e) => {
+      if (e.target === cloudModal) cloudModal.classList.add('hidden');
+    });
+  }
+
+  // Tabs toggle
+  if (tabSignin && tabSignup) {
+    tabSignin.addEventListener('click', () => {
+      tabSignin.classList.add('active');
+      tabSignup.classList.remove('active');
+      if (signinForm) signinForm.classList.remove('hidden');
+      if (signupForm) signupForm.classList.add('hidden');
+      if (signinStatus) signinStatus.classList.add('hidden');
+    });
+
+    tabSignup.addEventListener('click', () => {
+      tabSignup.classList.add('active');
+      tabSignin.classList.remove('active');
+      if (signupForm) signupForm.classList.remove('hidden');
+      if (signinForm) signinForm.classList.add('hidden');
+      if (signupStatus) signupStatus.classList.add('hidden');
+    });
+  }
+
+  // Sign In Form Submission
+  if (signinForm) {
+    signinForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('cloud-signin-email').value;
+      const password = document.getElementById('cloud-signin-password').value;
+      const submitBtn = document.getElementById('cloud-signin-submit-btn');
+
+      if (signinStatus) {
+        signinStatus.className = 'cloud-status-msg info';
+        signinStatus.textContent = 'Signing in to Supabase...';
+        signinStatus.classList.remove('hidden');
+      }
+      if (submitBtn) submitBtn.disabled = true;
+
+      try {
+        await SupabaseClient.signIn(email, password);
+        if (signinStatus) {
+          signinStatus.className = 'cloud-status-msg success';
+          signinStatus.textContent = 'Signed in successfully!';
+        }
+        await refreshModalState();
+        updateSyncIndicator(SyncService.getStatus());
+        showToast('Signed in to Cloud Sync');
+        SyncService.sync();
+      } catch (err) {
+        if (signinStatus) {
+          signinStatus.className = 'cloud-status-msg error';
+          signinStatus.textContent = err.message || 'Login failed. Please check your credentials.';
+        }
+      } finally {
+        if (submitBtn) submitBtn.disabled = false;
+      }
+    });
+  }
+
+  // Sign Up Form Submission (Gated by Gumroad Pro License Key)
+  if (signupForm) {
+    signupForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('cloud-signup-email').value;
+      const password = document.getElementById('cloud-signup-password').value;
+      const licenseKey = document.getElementById('cloud-signup-license').value;
+      const submitBtn = document.getElementById('cloud-signup-submit-btn');
+
+      if (signupStatus) {
+        signupStatus.className = 'cloud-status-msg info';
+        signupStatus.textContent = 'Verifying Gumroad Pro license...';
+        signupStatus.classList.remove('hidden');
+      }
+      if (submitBtn) submitBtn.disabled = true;
+
+      try {
+        const isKeyValid = await verifyGumroadLicense(licenseKey, false);
+        if (!isKeyValid) {
+          throw new Error('A valid Gumroad Pro license key is required to create a cloud account.');
+        }
+
+        if (signupStatus) {
+          signupStatus.textContent = 'Creating cloud account...';
+        }
+
+        const res = await SupabaseClient.signUp(email, password, licenseKey);
+        
+        if (res.requiresEmailConfirmation) {
+          if (signupStatus) {
+            signupStatus.className = 'cloud-status-msg success';
+            signupStatus.textContent = 'Registration successful! Please check your email to confirm your account before signing in.';
+          }
+        } else {
+          if (signupStatus) {
+            signupStatus.className = 'cloud-status-msg success';
+            signupStatus.textContent = 'Account created and activated!';
+          }
+          await refreshModalState();
+          updateSyncIndicator(SyncService.getStatus());
+          showToast('Pro Cloud Account Created');
+          SyncService.sync();
+        }
+      } catch (err) {
+        if (signupStatus) {
+          signupStatus.className = 'cloud-status-msg error';
+          signupStatus.textContent = err.message || 'Signup failed.';
+        }
+      } finally {
+        if (submitBtn) submitBtn.disabled = false;
+      }
+    });
+  }
+
+  // Sync Now Action
+  if (syncNowBtn) {
+    syncNowBtn.addEventListener('click', async () => {
+      syncNowBtn.classList.add('syncing');
+      syncNowBtn.disabled = true;
+      if (dashboardStatus) {
+        dashboardStatus.className = 'cloud-status-msg info';
+        dashboardStatus.textContent = 'Syncing collections with cloud...';
+        dashboardStatus.classList.remove('hidden');
+      }
+
+      try {
+        const result = await SyncService.sync();
+        if (result && result.success) {
+          if (dashboardStatus) {
+            dashboardStatus.className = 'cloud-status-msg success';
+            dashboardStatus.textContent = `Sync complete at ${new Date().toLocaleTimeString()}!`;
+          }
+          if (lastSyncedTime) {
+            lastSyncedTime.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', ' + new Date().toLocaleDateString();
+          }
+          showToast('Cloud sync complete');
+        } else {
+          throw new Error(result ? (result.error || result.reason) : 'Sync failed');
+        }
+      } catch (err) {
+        if (dashboardStatus) {
+          dashboardStatus.className = 'cloud-status-msg error';
+          dashboardStatus.textContent = `Sync error: ${err.message}`;
+        }
+      } finally {
+        syncNowBtn.classList.remove('syncing');
+        syncNowBtn.disabled = false;
+        updateSyncIndicator(SyncService.getStatus());
+      }
+    });
+  }
+
+  // Sign Out Action
+  if (signoutBtn) {
+    signoutBtn.addEventListener('click', async () => {
+      if (confirm('Are you sure you want to sign out from Cloud Sync? Your local collections will remain saved on this device.')) {
+        await SupabaseClient.signOut();
+        await refreshModalState();
+        updateSyncIndicator(SyncService.getStatus());
+        showToast('Signed out from Cloud Sync');
+      }
+    });
+  }
+}
+

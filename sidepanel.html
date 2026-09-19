@@ -22,6 +22,12 @@
       <div class="header-right" style="position: relative;">
         <!-- Hidden input for file upload (accepts .json or .html backups) -->
         <input type="file" id="backup-file-input" style="display: none;" accept=".json,.html">
+        <button id="cloud-sync-status-btn" class="icon-button cloud-sync-btn" title="Cloud Sync & Account" aria-label="Cloud Sync & Account">
+          <svg class="icon cloud-icon" viewBox="0 0 24 24" width="20" height="20">
+            <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM19 18H6c-2.21 0-4-1.79-4-4 0-2.05 1.53-3.76 3.56-3.97l1.07-.11.5-.95C8.08 7.14 9.94 6 12 6c2.62 0 4.88 1.86 5.39 4.43l.3 1.5 1.53.11c1.56.1 2.78 1.41 2.78 2.96 0 1.65-1.35 3-3 3z"/>
+          </svg>
+          <span class="sync-status-dot idle" id="sync-status-dot"></span>
+        </button>
         <button id="menu-trigger-btn" class="icon-button" title="More Actions" aria-label="More Actions">
           <svg class="icon" viewBox="0 0 24 24" width="20" height="20">
             <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2.1.9-2.1 2 .9 2 2.1 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
@@ -29,6 +35,13 @@
         </button>
         <!-- Dropdown Menu -->
         <div id="more-actions-menu" class="dropdown-menu hidden">
+          <button id="menu-cloud-account" class="dropdown-item" title="Cloud Sync & Account">
+            <svg class="icon-dropdown" viewBox="0 0 24 24" width="16" height="16">
+              <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/>
+            </svg>
+            Cloud Sync &amp; Account
+          </button>
+          <div class="dropdown-divider"></div>
           <button id="menu-bing-import" class="dropdown-item" title="Sync from Microsoft Edge Collections">
             <svg class="icon-dropdown" viewBox="0 0 24 24" width="16" height="16">
               <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/>
@@ -441,9 +454,103 @@
         </div>
       </div>
     </div>
+
+    <!-- Cloud Account & Sync Modal -->
+    <div id="cloud-account-modal" class="modal-overlay hidden">
+      <div class="modal-card cloud-modal-card">
+        <div class="modal-header">
+          <h2>Cloud Sync &amp; Account</h2>
+          <button id="close-cloud-modal-btn" class="icon-button-small" title="Close">
+            <svg viewBox="0 0 24 24" width="18" height="18">
+              <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body cloud-modal-body">
+          <!-- Auth Tabs (when logged out) -->
+          <div id="cloud-auth-view">
+            <div class="cloud-tab-nav">
+              <button id="cloud-tab-signin" type="button" class="cloud-tab-btn active">Sign In</button>
+              <button id="cloud-tab-signup" type="button" class="cloud-tab-btn">Create Pro Account</button>
+            </div>
+
+            <!-- Sign In Form -->
+            <form id="cloud-signin-form" class="cloud-form">
+              <div class="cloud-field">
+                <label for="cloud-signin-email">Email</label>
+                <input type="email" id="cloud-signin-email" placeholder="name@example.com" required autocomplete="email">
+              </div>
+              <div class="cloud-field">
+                <label for="cloud-signin-password">Password</label>
+                <input type="password" id="cloud-signin-password" placeholder="Your password" required autocomplete="current-password">
+              </div>
+              <button type="submit" id="cloud-signin-submit-btn" class="btn btn-primary cloud-submit-btn">Sign In to Cloud</button>
+              <div id="cloud-signin-status" class="cloud-status-msg hidden"></div>
+            </form>
+
+            <!-- Sign Up Form (Pro gated) -->
+            <form id="cloud-signup-form" class="cloud-form hidden">
+              <div class="cloud-pro-banner">
+                <div class="pro-tag">PRO FEATURE</div>
+                <p>Cloud sync is exclusively available for <strong>Collections Pro</strong> users.</p>
+              </div>
+              <div class="cloud-field">
+                <label for="cloud-signup-email">Email</label>
+                <input type="email" id="cloud-signup-email" placeholder="name@example.com" required autocomplete="email">
+              </div>
+              <div class="cloud-field">
+                <label for="cloud-signup-password">Password</label>
+                <input type="password" id="cloud-signup-password" placeholder="Create password (min 6 characters)" required minlength="6" autocomplete="new-password">
+              </div>
+              <div class="cloud-field">
+                <label for="cloud-signup-license">Gumroad License Key</label>
+                <input type="text" id="cloud-signup-license" placeholder="Paste your Gumroad Pro license key" required>
+              </div>
+              <button type="submit" id="cloud-signup-submit-btn" class="btn btn-primary cloud-submit-btn">Register &amp; Activate Sync</button>
+              <div id="cloud-signup-status" class="cloud-status-msg hidden"></div>
+            </form>
+          </div>
+
+          <!-- Dashboard View (when logged in) -->
+          <div id="cloud-dashboard-view" class="cloud-dashboard-view hidden">
+            <div class="cloud-user-card">
+              <div class="cloud-user-avatar">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                  <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                </svg>
+              </div>
+              <div class="cloud-user-details">
+                <div class="cloud-user-email-row">
+                  <span id="cloud-user-email-text" class="cloud-user-email">user@example.com</span>
+                  <span class="pro-badge-small">PRO</span>
+                </div>
+                <div class="cloud-sync-info">
+                  <span>Last synced: </span>
+                  <strong id="cloud-last-synced-time">Never</strong>
+                </div>
+              </div>
+            </div>
+
+            <div id="cloud-dashboard-status" class="cloud-status-msg hidden"></div>
+
+            <div class="cloud-dashboard-actions">
+              <button id="cloud-sync-now-btn" type="button" class="btn btn-primary cloud-action-btn">
+                <svg class="icon-inline sync-icon" viewBox="0 0 24 24" width="16" height="16">
+                  <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/>
+                </svg>
+                Sync Now
+              </button>
+              <button id="cloud-signout-btn" type="button" class="btn btn-secondary cloud-action-btn">Sign Out</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Script imports -->
+  <script src="supabase_client.js"></script>
+  <script src="sync_service.js"></script>
   <script src="sidepanel.js"></script>
 </body>
 </html>
