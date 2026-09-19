@@ -1,8 +1,12 @@
+import json
 import os
 import zipfile
 
 def package_extension():
-    zip_name = "edge-collections-sidebar-v1.0.8.zip"
+    with open("manifest.json", "r", encoding="utf-8") as manifest_file:
+        manifest = json.load(manifest_file)
+    version = manifest.get("version", "1.0.0")
+    zip_name = f"edge-collections-sidebar-v{version}.zip"
     os.makedirs("dist", exist_ok=True)
     zip_path = os.path.join("dist", zip_name)
     

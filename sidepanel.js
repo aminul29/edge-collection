@@ -7,7 +7,8 @@ let activeCollectionItems = []; // Caching items for search filtering
 
 let draggedCollectionId = null;
 let draggedItemId = null;
-let draggedType = null; // 'collection' or 'item'
+let draggedGroupId = null;
+let draggedType = null; // 'collection', 'item', or 'group'
 let backDragTimeout = null;
 
 let selectionModeActive = false;
@@ -75,10 +76,12 @@ const DBService = {
           req.onerror = () => rej(req.error);
         });
         
-        // Count items for each collection
+        // Count items for each collection (excluding group containers)
         const counts = {};
         items.forEach(item => {
-          counts[item.collectionId] = (counts[item.collectionId] || 0) + 1;
+          if (item.type !== 'group') {
+            counts[item.collectionId] = (counts[item.collectionId] || 0) + 1;
+          }
         });
         
         const result = collections.map(col => ({
@@ -220,7 +223,7 @@ const DBService = {
   },
 
 
-  addItem(collectionId, title, url, favicon, thumbnail) {
+  addItem(collectionId, title, url, favicon, thumbnail, groupId = null) {
     return new Promise((resolve, reject) => {
       if (!db) return reject(new Error("Database not initialized"));
       
@@ -229,6 +232,7 @@ const DBService = {
       const item = {
         id: generateId(),
         collectionId: collectionId,
+        groupId: groupId || null,
         title: title || "Untitled Page",
         url: url,
         favicon: favicon || "",
@@ -308,7 +312,7 @@ const DBService = {
     });
   },
 
-  addNote(collectionId, content, color) {
+  addNote(collectionId, content, color, groupId = null) {
     return new Promise((resolve, reject) => {
       if (!db) return reject(new Error("Database not initialized"));
       
@@ -317,6 +321,7 @@ const DBService = {
       const item = {
         id: generateId(),
         collectionId: collectionId,
+        groupId: groupId || null,
         type: "note",
         content: content || "",
         color: color || "yellow",
@@ -382,6 +387,219 @@ const DBService = {
     });
   },
 
+  addGroup(collectionId, title, parentGroupId = null, color = 'blue', viewMode = 'list') {
+    return new Promise((resolve, reject) => {
+      if (!db) return reject(new Error("Database not initialized"));
+      
+      const transaction = db.transaction(['items'], 'readwrite');
+      const store = transaction.objectStore('items');
+      const group = {
+        id: 'grp_' + generateId(),
+        collectionId: collectionId,
+        type: 'group',
+        title: title || "New Tab Group",
+        parentGroupId: parentGroupId || null,
+        color: color || 'blue',
+        collapsed: false,
+        viewMode: viewMode || 'list',
+        created: Date.now()
+      };
+      
+      const request = store.add(group);
+      request.onsuccess = () => resolve(group);
+      request.onerror = (e) => reject(e.target.error);
+    });
+  },
+
+  updateGroupViewMode(id, newViewMode) {
+    return new Promise((resolve, reject) => {
+      if (!db) return reject(new Error("Database not initialized"));
+      
+      const transaction = db.transaction(['items'], 'readwrite');
+      const store = transaction.objectStore('items');
+      const getReq = store.get(id);
+      
+      getReq.onsuccess = () => {
+        const group = getReq.result;
+        if (!group) return reject(new Error("Group not found"));
+        group.viewMode = newViewMode;
+        const updateReq = store.put(group);
+        updateReq.onsuccess = () => resolve(group);
+        updateReq.onerror = (e) => reject(e.target.error);
+      };
+      getReq.onerror = (e) => reject(e.target.error);
+    });
+  },
+
+  updateGroupTitle(id, newTitle) {
+    return new Promise((resolve, reject) => {
+      if (!db) return reject(new Error("Database not initialized"));
+      
+      const transaction = db.transaction(['items'], 'readwrite');
+      const store = transaction.objectStore('items');
+      const getReq = store.get(id);
+      
+      getReq.onsuccess = () => {
+        const group = getReq.result;
+        if (!group) return reject(new Error("Group not found"));
+        group.title = newTitle;
+        const updateReq = store.put(group);
+        updateReq.onsuccess = () => resolve(group);
+        updateReq.onerror = (e) => reject(e.target.error);
+      };
+      getReq.onerror = (e) => reject(e.target.error);
+    });
+  },
+
+  updateGroupColor(id, newColor) {
+    return new Promise((resolve, reject) => {
+      if (!db) return reject(new Error("Database not initialized"));
+      
+      const transaction = db.transaction(['items'], 'readwrite');
+      const store = transaction.objectStore('items');
+      const getReq = store.get(id);
+      
+      getReq.onsuccess = () => {
+        const group = getReq.result;
+        if (!group) return reject(new Error("Group not found"));
+        group.color = newColor;
+        const updateReq = store.put(group);
+        updateReq.onsuccess = () => resolve(group);
+        updateReq.onerror = (e) => reject(e.target.error);
+      };
+      getReq.onerror = (e) => reject(e.target.error);
+    });
+  },
+
+  toggleGroupCollapse(id, collapsed) {
+    return new Promise((resolve, reject) => {
+      if (!db) return reject(new Error("Database not initialized"));
+      
+      const transaction = db.transaction(['items'], 'readwrite');
+      const store = transaction.objectStore('items');
+      const getReq = store.get(id);
+      
+      getReq.onsuccess = () => {
+        const group = getReq.result;
+        if (!group) return reject(new Error("Group not found"));
+        group.collapsed = collapsed !== undefined ? collapsed : !group.collapsed;
+        const updateReq = store.put(group);
+        updateReq.onsuccess = () => resolve(group);
+        updateReq.onerror = (e) => reject(e.target.error);
+      };
+      getReq.onerror = (e) => reject(e.target.error);
+    });
+  },
+
+  deleteGroup(id, deleteContents = false) {
+    return new Promise(async (resolve, reject) => {
+      if (!db) return reject(new Error("Database not initialized"));
+      
+      try {
+        const allItems = await DBService.getAllItems();
+        const targetGroup = allItems.find(i => i.id === id && i.type === 'group');
+        const parentId = targetGroup ? targetGroup.parentGroupId : null;
+        
+        const transaction = db.transaction(['items'], 'readwrite');
+        const store = transaction.objectStore('items');
+        
+        if (deleteContents) {
+          const groupsToDelete = new Set([id]);
+          let added = true;
+          while (added) {
+            added = false;
+            allItems.forEach(i => {
+              if (i.type === 'group' && i.parentGroupId && groupsToDelete.has(i.parentGroupId) && !groupsToDelete.has(i.id)) {
+                groupsToDelete.add(i.id);
+                added = true;
+              }
+            });
+          }
+          
+          allItems.forEach(i => {
+            if (groupsToDelete.has(i.id) || (i.groupId && groupsToDelete.has(i.groupId))) {
+              store.delete(i.id);
+            }
+          });
+        } else {
+          allItems.forEach(i => {
+            if (i.groupId === id) {
+              i.groupId = parentId || null;
+              store.put(i);
+            } else if (i.type === 'group' && i.parentGroupId === id) {
+              i.parentGroupId = parentId || null;
+              store.put(i);
+            }
+          });
+          store.delete(id);
+        }
+        
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = (e) => reject(e.target.error);
+      } catch (err) {
+        reject(err);
+      }
+    });
+  },
+
+  moveItemToGroup(itemId, targetGroupId) {
+    return new Promise((resolve, reject) => {
+      if (!db) return reject(new Error("Database not initialized"));
+      
+      const transaction = db.transaction(['items'], 'readwrite');
+      const store = transaction.objectStore('items');
+      const getReq = store.get(itemId);
+      
+      getReq.onsuccess = () => {
+        const item = getReq.result;
+        if (!item) return reject(new Error("Item not found"));
+        item.groupId = targetGroupId || null;
+        delete item.sortOrder;
+        const updateReq = store.put(item);
+        updateReq.onsuccess = () => resolve(item);
+        updateReq.onerror = (e) => reject(e.target.error);
+      };
+      getReq.onerror = (e) => reject(e.target.error);
+    });
+  },
+
+  moveGroupToParent(groupId, targetParentGroupId) {
+    return new Promise(async (resolve, reject) => {
+      if (!db) return reject(new Error("Database not initialized"));
+      if (groupId === targetParentGroupId) return resolve();
+      
+      try {
+        const allItems = await DBService.getAllItems();
+        // Prevent cyclic nesting
+        let curr = targetParentGroupId;
+        while (curr) {
+          if (curr === groupId) {
+            return reject(new Error("Cannot nest a group inside its own child group."));
+          }
+          const parentGrp = allItems.find(i => i.id === curr && i.type === 'group');
+          curr = parentGrp ? parentGrp.parentGroupId : null;
+        }
+        
+        const transaction = db.transaction(['items'], 'readwrite');
+        const store = transaction.objectStore('items');
+        const getReq = store.get(groupId);
+        
+        getReq.onsuccess = () => {
+          const group = getReq.result;
+          if (!group) return reject(new Error("Group not found"));
+          group.parentGroupId = targetParentGroupId || null;
+          delete group.sortOrder;
+          const updateReq = store.put(group);
+          updateReq.onsuccess = () => resolve(group);
+          updateReq.onerror = (e) => reject(e.target.error);
+        };
+        getReq.onerror = (e) => reject(e.target.error);
+      } catch (err) {
+        reject(err);
+      }
+    });
+  },
+
   importBackupData(collectionsData) {
     return new Promise((resolve, reject) => {
       if (!db) return reject(new Error("Database not initialized"));
@@ -406,30 +624,52 @@ const DBService = {
         colStore.add(collection);
         collectionsImported++;
         
-        group.items.forEach((item, itemIndex) => {
-          const itemStoreObj = {
-            id: generateId() + '_' + index + '_' + itemIndex,
-            collectionId: colId,
-            created: Date.now() - (group.items.length - itemIndex) * 10 // slightly spacing creation times
-          };
-          
-          if (item.type === 'note') {
-            itemStoreObj.type = 'note';
-            itemStoreObj.content = item.content || '';
-            itemStoreObj.color = item.color || 'yellow';
-          } else {
-            itemStoreObj.type = 'link';
-            itemStoreObj.title = item.title || "Untitled";
-            itemStoreObj.url = item.url;
-            itemStoreObj.favicon = item.favicon || "";
-            itemStoreObj.thumbnail = item.thumbnail || "";
-            itemStoreObj.linkNote = item.linkNote || "";
-            itemStoreObj.itemTheme = item.itemTheme || "";
-          }
-          
-          itemStore.add(itemStoreObj);
-          itemsImported++;
-        });
+        // Map old group IDs to new group IDs for integrity
+        const groupIdMap = {};
+        if (Array.isArray(group.items)) {
+          group.items.forEach((item, itemIndex) => {
+            if (item.type === 'group') {
+              const newGrpId = 'grp_' + generateId() + '_' + index + '_' + itemIndex;
+              if (item.id) {
+                groupIdMap[item.id] = newGrpId;
+              }
+            }
+          });
+
+          group.items.forEach((item, itemIndex) => {
+            const isGroup = item.type === 'group';
+            const itemStoreObj = {
+              id: isGroup && item.id && groupIdMap[item.id] ? groupIdMap[item.id] : generateId() + '_' + index + '_' + itemIndex,
+              collectionId: colId,
+              created: Date.now() - (group.items.length - itemIndex) * 10
+            };
+            
+            if (isGroup) {
+              itemStoreObj.type = 'group';
+              itemStoreObj.title = item.title || 'Tab Group';
+              itemStoreObj.parentGroupId = item.parentGroupId && groupIdMap[item.parentGroupId] ? groupIdMap[item.parentGroupId] : null;
+              itemStoreObj.color = item.color || 'blue';
+              itemStoreObj.collapsed = !!item.collapsed;
+            } else if (item.type === 'note') {
+              itemStoreObj.type = 'note';
+              itemStoreObj.content = item.content || '';
+              itemStoreObj.color = item.color || 'yellow';
+              itemStoreObj.groupId = item.groupId && groupIdMap[item.groupId] ? groupIdMap[item.groupId] : null;
+            } else {
+              itemStoreObj.type = 'link';
+              itemStoreObj.title = item.title || "Untitled";
+              itemStoreObj.url = item.url;
+              itemStoreObj.favicon = item.favicon || "";
+              itemStoreObj.thumbnail = item.thumbnail || "";
+              itemStoreObj.linkNote = item.linkNote || "";
+              itemStoreObj.itemTheme = item.itemTheme || "";
+              itemStoreObj.groupId = item.groupId && groupIdMap[item.groupId] ? groupIdMap[item.groupId] : null;
+            }
+            
+            itemStore.add(itemStoreObj);
+            itemsImported++;
+          });
+        }
       });
     });
   },
@@ -461,11 +701,21 @@ const DBService = {
           if (!itemsMap[item.collectionId]) {
             itemsMap[item.collectionId] = [];
           }
-          if (item.type === 'note') {
+          if (item.type === 'group') {
+            itemsMap[item.collectionId].push({
+              id: item.id,
+              type: 'group',
+              title: item.title,
+              parentGroupId: item.parentGroupId || null,
+              color: item.color || 'blue',
+              collapsed: !!item.collapsed
+            });
+          } else if (item.type === 'note') {
             itemsMap[item.collectionId].push({
               type: 'note',
               content: item.content,
-              color: item.color || 'yellow'
+              color: item.color || 'yellow',
+              groupId: item.groupId || null
             });
           } else {
             itemsMap[item.collectionId].push({
@@ -475,7 +725,8 @@ const DBService = {
               favicon: item.favicon || "",
               thumbnail: item.thumbnail || "",
               linkNote: item.linkNote || "",
-              itemTheme: item.itemTheme || ""
+              itemTheme: item.itemTheme || "",
+              groupId: item.groupId || null
             });
           }
         });
@@ -521,7 +772,13 @@ async function reorderItems(collectionId, draggedId, targetId) {
   const targetIdx = items.findIndex(i => i.id === targetId);
   if (draggedIdx === -1 || targetIdx === -1) return;
   
+  const targetItem = items[targetIdx];
   const [draggedItem] = items.splice(draggedIdx, 1);
+  
+  if (draggedItem.type !== 'group' && targetItem) {
+    draggedItem.groupId = targetItem.type === 'group' ? targetItem.id : (targetItem.groupId || null);
+  }
+  
   items.splice(targetIdx, 0, draggedItem);
   
   const transaction = db.transaction(['items'], 'readwrite');
@@ -556,19 +813,46 @@ async function moveItemToCollection(itemId, targetCollectionId) {
 }
 
 // --- DOM and Event Listeners Setup ---
-document.addEventListener('DOMContentLoaded', async () => {
+async function initApp() {
   try {
+    setupEventListeners();
+
     await DBService.init();
     await checkProStatusOnStartup();
-    setupEventListeners();
+    
+    // Check if the pin extension banner should be shown
+    if (!localStorage.getItem('pin-banner-dismissed')) {
+      const banner = document.getElementById('pin-extension-banner');
+      if (banner) {
+        banner.classList.remove('hidden');
+      }
+    }
+
     await render();
   } catch (err) {
     console.error("Initialization failed:", err);
     showToast("Error initializing local storage.");
   }
-});
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initApp);
+} else {
+  initApp();
+}
 
 function setupEventListeners() {
+  // Pin Banner Dismissal
+  const closePinBannerBtn = document.getElementById('close-pin-banner-btn');
+  if (closePinBannerBtn) {
+    closePinBannerBtn.addEventListener('click', () => {
+      const banner = document.getElementById('pin-extension-banner');
+      if (banner) {
+        banner.classList.add('hidden');
+      }
+      localStorage.setItem('pin-banner-dismissed', 'true');
+    });
+  }
   // Navigation
   const backBtn = document.getElementById('back-button');
   if (backBtn) {
@@ -680,6 +964,34 @@ function setupEventListeners() {
     if (e.key === 'Escape') document.getElementById('inline-creation-form').classList.add('hidden');
   });
 
+  // Tab Group Creation Form wiring
+  const addTabGroupBtn = document.getElementById('add-tab-group-btn');
+  if (addTabGroupBtn) {
+    addTabGroupBtn.addEventListener('click', () => {
+      toggleTabGroupForm();
+    });
+  }
+
+  const cancelNewTabGroupBtn = document.getElementById('cancel-new-tab-group-btn');
+  if (cancelNewTabGroupBtn) {
+    cancelNewTabGroupBtn.addEventListener('click', () => {
+      document.getElementById('inline-tab-group-form').classList.add('hidden');
+    });
+  }
+
+  const saveNewTabGroupBtn = document.getElementById('save-new-tab-group-btn');
+  if (saveNewTabGroupBtn) {
+    saveNewTabGroupBtn.addEventListener('click', handleCreateTabGroup);
+  }
+
+  const newTabGroupInput = document.getElementById('new-tab-group-input');
+  if (newTabGroupInput) {
+    newTabGroupInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') handleCreateTabGroup();
+      if (e.key === 'Escape') document.getElementById('inline-tab-group-form').classList.add('hidden');
+    });
+  }
+
   // Dropdown Menu Toggling
   const menuTrigger = document.getElementById('menu-trigger-btn');
   const dropdownMenu = document.getElementById('more-actions-menu');
@@ -691,7 +1003,7 @@ function setupEventListeners() {
     });
     
     document.addEventListener('click', (e) => {
-      if (!dropdownMenu.classList.contains('hidden') && !e.target.closest('#more-actions-menu') && e.target !== menuTrigger) {
+      if (!dropdownMenu.classList.contains('hidden') && !e.target.closest('#more-actions-menu') && !e.target.closest('#menu-trigger-btn')) {
         dropdownMenu.classList.add('hidden');
       }
     });
@@ -920,6 +1232,9 @@ function setView(view, collectionId = null) {
   
   preSearchView = null;
   inlineForm.classList.add('hidden');
+  const addTabGroupBtn = document.getElementById('add-tab-group-btn');
+  const inlineTabGroupForm = document.getElementById('inline-tab-group-form');
+  if (inlineTabGroupForm) inlineTabGroupForm.classList.add('hidden');
   searchInput.value = '';
 
   if (view === 'master') {
@@ -929,6 +1244,7 @@ function setView(view, collectionId = null) {
     detailPanel.classList.add('hidden');
     searchInput.placeholder = "Search collections...";
     if (addNoteBtn) addNoteBtn.classList.add('hidden');
+    if (addTabGroupBtn) addTabGroupBtn.classList.add('hidden');
     if (createCollectionBtn) createCollectionBtn.classList.remove('hidden');
   } else if (view === 'detail') {
     backBtn.classList.remove('hidden');
@@ -936,6 +1252,7 @@ function setView(view, collectionId = null) {
     detailPanel.classList.remove('hidden');
     searchInput.placeholder = "Search items...";
     if (addNoteBtn) addNoteBtn.classList.remove('hidden');
+    if (addTabGroupBtn) addTabGroupBtn.classList.remove('hidden');
     if (createCollectionBtn) createCollectionBtn.classList.add('hidden');
   }
   
@@ -1246,419 +1563,824 @@ async function renderCollectionDetails() {
     
     // Apply search filter if active
     const searchVal = document.getElementById('search-input').value.toLowerCase().trim();
-    const filteredItems = activeCollectionItems.filter(item => {
-      if (!searchVal) return true;
-      if (item.type === 'note') {
-        return (item.content || "").toLowerCase().includes(searchVal);
+    
+    // Separate groups and content items
+    const allGroups = activeCollectionItems.filter(i => i.type === 'group');
+    const allContentItems = activeCollectionItems.filter(i => i.type !== 'group');
+
+    // Build hierarchy maps
+    const groupMap = new Map();
+    allGroups.forEach(g => {
+      groupMap.set(g.id, {
+        ...g,
+        childGroups: [],
+        items: []
+      });
+    });
+
+    const rootGroups = [];
+    allGroups.forEach(g => {
+      const node = groupMap.get(g.id);
+      if (g.parentGroupId && groupMap.has(g.parentGroupId)) {
+        groupMap.get(g.parentGroupId).childGroups.push(node);
       } else {
+        rootGroups.push(node);
+      }
+    });
+
+    const ungroupedItems = [];
+    allContentItems.forEach(item => {
+      if (item.groupId && groupMap.has(item.groupId)) {
+        groupMap.get(item.groupId).items.push(item);
+      } else {
+        ungroupedItems.push(item);
+      }
+    });
+
+    // If search active, filter items and only keep matching groups/items
+    if (searchVal) {
+      const matchesSearch = (item) => {
+        if (item.type === 'note') {
+          return (item.content || "").toLowerCase().includes(searchVal);
+        }
         return (item.title || "").toLowerCase().includes(searchVal) || 
                (item.url || "").toLowerCase().includes(searchVal) ||
                (item.linkNote || "").toLowerCase().includes(searchVal);
+      };
+
+      const filterNode = (node) => {
+        node.items = node.items.filter(matchesSearch);
+        node.childGroups = node.childGroups.filter(filterNode);
+        const groupTitleMatch = (node.title || "").toLowerCase().includes(searchVal);
+        if (groupTitleMatch) {
+          // If group matches, auto-expand so user sees it
+          node.collapsed = false;
+        }
+        return groupTitleMatch || node.items.length > 0 || node.childGroups.length > 0;
+      };
+
+      const filteredRoots = rootGroups.filter(filterNode);
+      const filteredUngrouped = ungroupedItems.filter(matchesSearch);
+
+      if (filteredRoots.length === 0 && filteredUngrouped.length === 0) {
+        container.innerHTML = `<div class="empty-state" style="padding: 24px 0;"><p style="font-size: 12px; color: var(--text-secondary);">No items match "${escapeHTML(searchVal)}".</p></div>`;
+        return;
       }
+
+      filteredRoots.forEach(node => {
+        container.appendChild(renderTabGroupNode(node, 0));
+      });
+
+      if (filteredUngrouped.length > 0) {
+        const ungrContainer = document.createElement('div');
+        ungrContainer.className = 'ungrouped-items-container';
+        if (filteredRoots.length > 0) {
+          const header = document.createElement('div');
+          header.className = 'ungrouped-items-header';
+          header.innerHTML = `<span>Ungrouped Items (${filteredUngrouped.length})</span>`;
+          ungrContainer.appendChild(header);
+        }
+        filteredUngrouped.forEach(item => {
+          if (item.type === 'note') ungrContainer.appendChild(createNoteCardElement(item));
+          else ungrContainer.appendChild(createLinkCardElement(item));
+        });
+        container.appendChild(ungrContainer);
+      }
+      return;
+    }
+
+    // Normal rendering
+    rootGroups.forEach(node => {
+      container.appendChild(renderTabGroupNode(node, 0));
     });
-    
-    filteredItems.forEach(item => {
-      if (item.type === 'note') {
-        const card = document.createElement('div');
-        card.className = `note-card note-${item.color || 'yellow'}`;
-        card.dataset.id = item.id;
-        
-        const checkboxHTML = selectionModeActive ? `
-          <div class="item-checkbox-wrapper">
-            <input type="checkbox" class="item-checkbox" data-id="${item.id}" ${selectedItemIds.has(item.id) ? 'checked' : ''} />
-          </div>
-        ` : '';
 
-        card.innerHTML = `
-          ${checkboxHTML}
-          <div class="note-content" contenteditable="${selectionModeActive ? 'false' : 'true'}" placeholder="Write a note...">${escapeHTML(item.content)}</div>
-          <div class="note-footer">
-            <div class="note-color-picker">
-              <div class="color-dot dot-yellow ${item.color === 'yellow' || !item.color ? 'active' : ''}" data-color="yellow" title="Yellow"></div>
-              <div class="color-dot dot-blue ${item.color === 'blue' ? 'active' : ''}" data-color="blue" title="Blue"></div>
-              <div class="color-dot dot-green ${item.color === 'green' ? 'active' : ''}" data-color="green" title="Green"></div>
-              <div class="color-dot dot-pink ${item.color === 'pink' ? 'active' : ''}" data-color="pink" title="Pink"></div>
-              <div class="color-dot dot-purple ${item.color === 'purple' ? 'active' : ''}" data-color="purple" title="Purple"></div>
-            </div>
-            <button class="note-delete-btn" title="Delete Note">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-                <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-              </svg>
-            </button>
-          </div>
-        `;
-        
-        const contentEl = card.querySelector('.note-content');
-        
-        // Selection mode card click toggle
-        card.addEventListener('click', (e) => {
-          if (selectionModeActive) {
-            e.preventDefault();
-            e.stopPropagation();
-            const checkbox = card.querySelector('.item-checkbox');
-            if (checkbox) {
-              checkbox.checked = !checkbox.checked;
-              toggleItemSelection(item.id, checkbox.checked);
-            }
-          }
-        });
-        
-        const checkboxEl = card.querySelector('.item-checkbox');
-        if (checkboxEl) {
-          checkboxEl.addEventListener('click', (e) => {
-            e.stopPropagation();
-            toggleItemSelection(item.id, checkboxEl.checked);
-          });
-        }
-        
-        // Auto-save on blur
-        contentEl.addEventListener('blur', async () => {
-          const newText = contentEl.innerText.trim();
-          if (newText !== item.content) {
-            await DBService.updateNoteContent(item.id, newText);
-            item.content = newText;
-            showToast("Note saved");
-          }
-        });
-        
-        // Keydown handlers
-        contentEl.addEventListener('keydown', (e) => {
-          if (e.key === 'Escape' || (e.key === 'Enter' && e.shiftKey)) {
-            contentEl.blur();
-            e.preventDefault();
-          }
-        });
-        
-        // Color picker handlers
-        const dots = card.querySelectorAll('.color-dot');
-        dots.forEach(dot => {
-          dot.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            const newColor = dot.dataset.color;
-            await DBService.updateNoteColor(item.id, newColor);
-            
-            dots.forEach(d => d.classList.remove('active'));
-            dot.classList.add('active');
-            
-            card.className = `note-card note-${newColor}`;
-            item.color = newColor;
-            showToast("Color updated");
-          });
-        });
-        
-        // Delete handler
-        card.querySelector('.note-delete-btn').addEventListener('click', async (e) => {
-          e.stopPropagation();
-          if (confirm("Are you sure you want to delete this note?")) {
-            await DBService.deleteItem(item.id);
-            showToast("Removed note");
-            render();
-          }
-        });
-        
-        // Drag and drop setup for reordering items inside a collection
-        card.setAttribute('draggable', 'true');
-        
-        card.addEventListener('dragstart', (e) => {
-          card.classList.add('dragging');
-          draggedItemId = item.id;
-          draggedType = 'item';
-          e.dataTransfer.effectAllowed = 'move';
-        });
-        
-        card.addEventListener('dragend', () => {
-          card.classList.remove('dragging');
-          draggedItemId = null;
-          draggedType = null;
-          document.querySelectorAll('.item-card, .note-card').forEach(el => el.classList.remove('drag-hover'));
-        });
-        
-        card.addEventListener('dragover', (e) => {
-          e.preventDefault();
-          if (draggedType === 'item' && draggedItemId !== item.id) {
-            card.classList.add('drag-hover');
-          }
-        });
-        
-        card.addEventListener('dragleave', () => {
-          card.classList.remove('drag-hover');
-        });
-        
-        card.addEventListener('drop', async (e) => {
-          e.preventDefault();
-          card.classList.remove('drag-hover');
-          
-          if (draggedType === 'item' && draggedItemId && draggedItemId !== item.id) {
-            await reorderItems(activeCollectionId, draggedItemId, item.id);
-            render();
-          }
-        });
-        
-        container.appendChild(card);
-      } else {
-        const card = document.createElement('div');
-        card.className = `item-card ${item.itemTheme ? `item-theme-${item.itemTheme}` : ''}`;
-        card.dataset.id = item.id;
-        
-        const domain = getDomainName(item.url);
-        const formattedDate = new Date(item.created).toLocaleDateString(undefined, { 
-          month: 'short', 
-          day: 'numeric' 
-        });
-        
-        // Safe MV3 favicon retrieval
-        let faviconSrc = "";
-        if (chrome.runtime && chrome.runtime.id) {
-          faviconSrc = `chrome-extension://${chrome.runtime.id}/_favicon/?pageUrl=${encodeURIComponent(item.url)}&size=32`;
-        } else {
-          faviconSrc = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
-        }
+    if (ungroupedItems.length > 0) {
+      const ungrContainer = document.createElement('div');
+      ungrContainer.className = 'ungrouped-items-container';
+      if (rootGroups.length > 0) {
+        const header = document.createElement('div');
+        header.className = 'ungrouped-items-header';
+        header.innerHTML = `<span>Ungrouped Tabs & Notes (${ungroupedItems.length})</span>`;
+        ungrContainer.appendChild(header);
+      }
+      ungroupedItems.forEach(item => {
+        if (item.type === 'note') ungrContainer.appendChild(createNoteCardElement(item));
+        else ungrContainer.appendChild(createLinkCardElement(item));
+      });
+      container.appendChild(ungrContainer);
+    }
 
-        const fallbackChar = domain ? domain[0].toUpperCase() : 'W';
+    // Enable dropping directly on container or ungrouped header to un-group
+    container.ondragover = (e) => {
+      e.preventDefault();
+      if (draggedType === 'item' || draggedType === 'group') {
+        e.dataTransfer.dropEffect = 'move';
+      }
+    };
 
-        const checkboxHTML = selectionModeActive ? `
-          <div class="item-checkbox-wrapper">
-            <input type="checkbox" class="item-checkbox" data-id="${item.id}" ${selectedItemIds.has(item.id) ? 'checked' : ''} />
-          </div>
-        ` : '';
-
-        card.innerHTML = `
-          ${checkboxHTML}
-          <div class="item-thumbnail-container">
-            ${item.thumbnail ? `<img class="item-thumbnail" src="${escapeHTML(item.thumbnail)}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />` : ''}
-            <div class="thumbnail-fallback" style="${item.thumbnail ? 'display: none;' : ''}">
-              <span>${fallbackChar}</span>
-            </div>
-          </div>
-          <img class="item-favicon" src="${faviconSrc}" alt="" style="display:none;" 
-            onload="this.style.display='inline-block'; if(this.nextElementSibling) this.nextElementSibling.style.display='none';" 
-            onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='inline-flex';" />
-          <div class="item-favicon-fallback" style="display:inline-flex; width:16px; height:16px; align-items:center; justify-content:center; background:var(--primary-light); color:var(--primary-color); border-radius:2px; font-size:10px; font-weight:bold; margin-top:3px; flex-shrink:0;">
-            ${domain ? domain[0].toUpperCase() : 'W'}
-          </div>
-          <div class="item-details">
-            <a class="item-title" href="${escapeHTML(item.url)}" target="_blank" title="${escapeHTML(item.title)}">${escapeHTML(item.title)}</a>
-            <div class="item-meta">
-              <span class="item-domain">${escapeHTML(domain)}</span>
-              <span>&bull;</span>
-              <span class="item-date">${formattedDate}</span>
-            </div>
-            <div class="link-note-preview ${item.linkNote ? '' : 'hidden'}">${escapeHTML(item.linkNote || '')}</div>
-          </div>
-          <div class="item-actions">
-            <button class="icon-button-small edit-link-note-btn ${item.linkNote ? 'has-note' : ''}" title="${item.linkNote ? 'Edit Tab Note' : 'Add Tab Note'}" data-id="${item.id}">
-              <svg viewBox="0 0 24 24" width="14" height="14">
-                <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25z"/>
-                <path d="M20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
-              </svg>
-            </button>
-            <button class="icon-button-small change-item-theme-btn ${item.itemTheme ? 'has-theme' : ''}" title="Change Tab Color" data-id="${item.id}">
-              <svg viewBox="0 0 24 24" width="14" height="14">
-                <path d="M12 3a9 9 0 0 0 0 18c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zM6.5 12C5.67 12 5 11.33 5 10.5S5.67 9 6.5 9 8 9.67 8 10.5 7.33 12 6.5 12zm3-4C8.67 8 8 7.33 8 6.5S8.67 5 9.5 5s1.5.67 1.5 1.5S10.33 8 9.5 8zm5 0c-.83 0-1.5-.67-1.5-1.5S13.67 5 14.5 5s1.5.67 1.5 1.5S15.33 8 14.5 8zm3 4c-.83 0-1.5-.67-1.5-1.5S16.67 9 17.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>
-              </svg>
-            </button>
-            <button class="icon-button-small delete-item-btn" title="Delete Link" data-id="${item.id}">
-              <svg viewBox="0 0 24 24" width="14" height="14">
-                <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-              </svg>
-            </button>
-          </div>
-          <div class="link-note-editor hidden">
-            <textarea class="link-note-input" maxlength="500" placeholder="Add a note for this saved tab...">${escapeHTML(item.linkNote || '')}</textarea>
-            <div class="link-note-actions">
-              <button class="btn btn-secondary cancel-link-note-btn">Cancel</button>
-              <button class="btn btn-primary save-link-note-btn">Save Note</button>
-            </div>
-          </div>
-        `;
-        
-        // Let whole item card click open in new tab (except when clicking delete button or text selection)
-        card.addEventListener('click', (e) => {
-          if (selectionModeActive) {
-            e.preventDefault();
-            e.stopPropagation();
-            const checkbox = card.querySelector('.item-checkbox');
-            if (checkbox) {
-              checkbox.checked = !checkbox.checked;
-              toggleItemSelection(item.id, checkbox.checked);
-            }
-            return;
-          }
-          if (e.target.closest('.delete-item-btn') || e.target.closest('.edit-link-note-btn') || e.target.closest('.change-item-theme-btn') || e.target.closest('.item-theme-popover') || e.target.closest('.link-note-editor')) return;
-          if (window.getSelection().toString()) return; // Don't navigate if user is highlight-selecting title text
-          
-          e.preventDefault();
-          if (chrome.tabs) {
-            chrome.tabs.create({ url: item.url });
-          } else {
-            window.open(item.url, '_blank');
-          }
-        });
-        
-        const checkboxEl = card.querySelector('.item-checkbox');
-        if (checkboxEl) {
-          checkboxEl.addEventListener('click', (e) => {
-            e.stopPropagation();
-            toggleItemSelection(item.id, checkboxEl.checked);
-          });
-        }
-
-        const noteEditor = card.querySelector('.link-note-editor');
-        const noteInput = card.querySelector('.link-note-input');
-        const notePreview = card.querySelector('.link-note-preview');
-        const editNoteBtn = card.querySelector('.edit-link-note-btn');
-
-        if (editNoteBtn && noteEditor && noteInput) {
-          editNoteBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            noteEditor.classList.toggle('hidden');
-            if (!noteEditor.classList.contains('hidden')) {
-              noteInput.focus();
-              noteInput.setSelectionRange(noteInput.value.length, noteInput.value.length);
-            }
-          });
-        }
-
-        const saveNoteBtn = card.querySelector('.save-link-note-btn');
-        if (saveNoteBtn && noteInput && noteEditor) {
-          saveNoteBtn.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            const newNote = noteInput.value.trim();
-            await DBService.updateLinkNote(item.id, newNote);
-            item.linkNote = newNote;
-
-            if (notePreview) {
-              notePreview.textContent = newNote;
-              notePreview.classList.toggle('hidden', !newNote);
-            }
-            if (editNoteBtn) {
-              editNoteBtn.classList.toggle('has-note', !!newNote);
-              editNoteBtn.title = newNote ? 'Edit Tab Note' : 'Add Tab Note';
-            }
-
-            noteEditor.classList.add('hidden');
-            showToast(newNote ? 'Tab note saved' : 'Tab note cleared');
-          });
-        }
-
-        const cancelNoteBtn = card.querySelector('.cancel-link-note-btn');
-        if (cancelNoteBtn && noteInput && noteEditor) {
-          cancelNoteBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            noteInput.value = item.linkNote || '';
-            noteEditor.classList.add('hidden');
-          });
-        }
-
-        if (noteInput) {
-          noteInput.addEventListener('click', (e) => e.stopPropagation());
-          noteInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') {
-              noteInput.value = item.linkNote || '';
-              noteEditor.classList.add('hidden');
-              e.preventDefault();
-            }
-          });
-        }
-
-        const themeBtn = card.querySelector('.change-item-theme-btn');
-        if (themeBtn) {
-          themeBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-
-            const existingPopover = card.querySelector('.item-theme-popover');
-            if (existingPopover) {
-              existingPopover.remove();
-              return;
-            }
-
-            document.querySelectorAll('.item-theme-popover').forEach(el => el.remove());
-            const popover = document.createElement('div');
-            popover.className = 'item-theme-popover';
-            const themes = [
-              { id: '', label: 'Default' },
-              { id: 'blue', label: 'Blue' },
-              { id: 'green', label: 'Green' },
-              { id: 'yellow', label: 'Yellow' },
-              { id: 'pink', label: 'Pink' },
-              { id: 'purple', label: 'Purple' }
-            ];
-
-            themes.forEach(theme => {
-              const btn = document.createElement('button');
-              btn.type = 'button';
-              btn.className = `item-theme-dot item-theme-dot-${theme.id || 'default'} ${(item.itemTheme || '') === theme.id ? 'active' : ''}`;
-              btn.title = theme.label;
-              btn.addEventListener('click', async (event) => {
-                event.stopPropagation();
-                await DBService.updateItemTheme(item.id, theme.id);
-                item.itemTheme = theme.id;
-
-                card.className = `item-card ${theme.id ? `item-theme-${theme.id}` : ''}`;
-                themeBtn.classList.toggle('has-theme', !!theme.id);
-                popover.remove();
-                showToast(theme.id ? `Tab color updated to ${theme.label}` : 'Tab color reset');
-              });
-              popover.appendChild(btn);
-            });
-
-            card.appendChild(popover);
-          });
-        }
-        
-        // Delete listener
-        card.querySelector('.delete-item-btn').addEventListener('click', async (e) => {
-          e.stopPropagation();
-          const id = e.currentTarget.dataset.id;
-          await DBService.deleteItem(id);
-          showToast("Removed item");
+    container.ondrop = async (e) => {
+      if (e.target === container || e.target.classList.contains('ungrouped-items-header') || e.target.closest('.ungrouped-items-header')) {
+        e.preventDefault();
+        if (draggedType === 'item' && draggedItemId) {
+          await DBService.moveItemToGroup(draggedItemId, null);
+          showToast("Moved to ungrouped");
           render();
-        });
-        
-        // Drag and drop setup for reordering items inside a collection
-        card.setAttribute('draggable', 'true');
-        
-        card.addEventListener('dragstart', (e) => {
-          card.classList.add('dragging');
-          draggedItemId = item.id;
-          draggedType = 'item';
-          e.dataTransfer.effectAllowed = 'move';
-        });
-        
-        card.addEventListener('dragend', () => {
-          card.classList.remove('dragging');
-          draggedItemId = null;
-          draggedType = null;
-          document.querySelectorAll('.item-card, .note-card').forEach(el => el.classList.remove('drag-hover'));
-        });
-        
-        card.addEventListener('dragover', (e) => {
-          e.preventDefault();
-          if (draggedType === 'item' && draggedItemId !== item.id) {
-            card.classList.add('drag-hover');
-          }
-        });
-        
-        card.addEventListener('dragleave', () => {
-          card.classList.remove('drag-hover');
-        });
-        
-        card.addEventListener('drop', async (e) => {
-          e.preventDefault();
-          card.classList.remove('drag-hover');
-          
-          if (draggedType === 'item' && draggedItemId && draggedItemId !== item.id) {
-            await reorderItems(activeCollectionId, draggedItemId, item.id);
-            render();
-          }
-        });
-        
-        container.appendChild(card);
+        } else if (draggedType === 'group' && draggedGroupId) {
+          await DBService.moveGroupToParent(draggedGroupId, null);
+          showToast("Moved to root");
+          render();
+        }
       }
-    });
+    };
+
   } catch (err) {
     console.error("Render items error:", err);
   }
+}
+
+// Calculate total items recursively inside a group node
+function getGroupTotalCount(node) {
+  let count = node.items ? node.items.length : 0;
+  if (node.childGroups && node.childGroups.length > 0) {
+    count += node.childGroups.reduce((sum, child) => sum + getGroupTotalCount(child), 0);
+  }
+  return count;
+}
+
+// Render Tab Group Tree Node
+function renderTabGroupNode(groupNode, level = 0) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'tab-group-wrapper';
+  wrapper.dataset.groupId = groupNode.id;
+  wrapper.dataset.level = level;
+  if (groupNode.color) {
+    wrapper.style.setProperty('--group-accent', `var(--col-${groupNode.color})`);
+  }
+
+  const totalCount = getGroupTotalCount(groupNode);
+
+  const header = document.createElement('div');
+  header.className = `tab-group-header group-header-color-${groupNode.color || 'blue'}`;
+  header.setAttribute('draggable', 'true');
+
+  header.innerHTML = `
+    <button class="tab-group-collapse-btn ${groupNode.collapsed ? 'collapsed' : ''}" title="${groupNode.collapsed ? 'Expand group' : 'Collapse group'}">
+      <svg viewBox="0 0 24 24" width="16" height="16">
+        <path fill="currentColor" d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
+      </svg>
+    </button>
+    <div class="tab-group-color-indicator dot-${groupNode.color || 'blue'}" title="Change color"></div>
+    <span class="tab-group-title" title="Click or double-click to rename">${escapeHTML(groupNode.title)}</span>
+    <span class="tab-group-count">${totalCount}</span>
+    <div class="tab-group-actions">
+      <button class="icon-button-small tab-group-add-tab-btn" title="Add Current Tab to this Group">
+        <svg viewBox="0 0 24 24" width="14" height="14">
+          <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+        </svg>
+      </button>
+      <button class="icon-button-small tab-group-add-subgroup-btn" title="Add Sub-Group">
+        <svg viewBox="0 0 24 24" width="14" height="14">
+          <path d="M20 6h-8l-2-2H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-1 8h-3v3h-2v-3h-3v-2h3V9h2v3h3v2z"/>
+        </svg>
+      </button>
+      <button class="icon-button-small tab-group-view-btn" title="${(groupNode.viewMode || 'list') === 'grid' ? 'Switch to List View' : 'Switch to Grid View'}">
+        <svg viewBox="0 0 24 24" width="13" height="13">
+          ${(groupNode.viewMode || 'list') === 'grid' 
+            ? '<path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/>' 
+            : '<path d="M4 11h5V5H4v6zm0 7h5v-6H4v6zm6 0h5v-6h-5v6zm6 0h5v-6h-5v6zm-6-7h5V5h-5v6zm6-6v6h5V5h-5z"/>'}
+        </svg>
+      </button>
+      <button class="icon-button-small tab-group-color-btn" title="Change Color">
+        <svg viewBox="0 0 24 24" width="13" height="13">
+          <path d="M12 3a9 9 0 0 0 0 18c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9c-.83 0-1.5-.67-1.5-1.5S5.67 9 6.5 9 8 9.67 8 10.5 7.33 12 6.5 12zm3-4C8.67 8 8 7.33 8 6.5S8.67 5 9.5 5s1.5.67 1.5 1.5S10.33 8 9.5 8zm5 0c-.83 0-1.5-.67-1.5-1.5S13.67 5 14.5 5s1.5.67 1.5 1.5S15.33 8 14.5 8zm3 4c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>
+        </svg>
+      </button>
+      <button class="icon-button-small tab-group-delete-btn" title="Delete Group">
+        <svg viewBox="0 0 24 24" width="13" height="13">
+          <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+        </svg>
+      </button>
+    </div>
+  `;
+
+  // Group View Mode toggle
+  const viewBtn = header.querySelector('.tab-group-view-btn');
+  if (viewBtn) {
+    viewBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const currentMode = groupNode.viewMode || 'list';
+      const newMode = currentMode === 'grid' ? 'list' : 'grid';
+      groupNode.viewMode = newMode;
+      await DBService.updateGroupViewMode(groupNode.id, newMode);
+      render();
+    });
+  }
+
+  // Collapse / Expand toggle
+  const collapseBtn = header.querySelector('.tab-group-collapse-btn');
+  const toggleCollapse = async (e) => {
+    if (e) e.stopPropagation();
+    const newCollapsed = !groupNode.collapsed;
+    groupNode.collapsed = newCollapsed;
+    await DBService.toggleGroupCollapse(groupNode.id, newCollapsed);
+    const content = wrapper.querySelector('.tab-group-content');
+    if (content) content.classList.toggle('collapsed', newCollapsed);
+    if (collapseBtn) {
+      collapseBtn.classList.toggle('collapsed', newCollapsed);
+      collapseBtn.title = newCollapsed ? "Expand group" : "Collapse group";
+    }
+  };
+  collapseBtn.addEventListener('click', toggleCollapse);
+
+  // Rename Title
+  const titleEl = header.querySelector('.tab-group-title');
+  const startRename = (e) => {
+    e.stopPropagation();
+    if (header.querySelector('.tab-group-title-input')) return;
+
+    const currentTitle = groupNode.title;
+    const input = document.createElement('input');
+    input.className = 'tab-group-title-input';
+    input.value = currentTitle;
+    input.maxLength = 50;
+
+    titleEl.classList.add('editing');
+    header.insertBefore(input, header.querySelector('.tab-group-count'));
+    input.focus();
+    input.select();
+
+    const saveRename = async () => {
+      const val = input.value.trim();
+      input.remove();
+      titleEl.classList.remove('editing');
+      if (val && val !== currentTitle) {
+        groupNode.title = val;
+        titleEl.textContent = val;
+        await DBService.updateGroupTitle(groupNode.id, val);
+        showToast("Group renamed");
+      }
+    };
+
+    input.addEventListener('blur', saveRename);
+    input.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') {
+        input.blur();
+      } else if (ev.key === 'Escape') {
+        input.value = currentTitle;
+        input.blur();
+      }
+    });
+  };
+  titleEl.addEventListener('dblclick', startRename);
+
+  // Color picker
+  const colorIndicator = header.querySelector('.tab-group-color-indicator');
+  const colorBtn = header.querySelector('.tab-group-color-btn');
+  const openColorPicker = (e) => {
+    e.stopPropagation();
+    const actions = header.querySelector('.tab-group-actions');
+    const existing = actions.querySelector('.tab-group-color-popover');
+    if (existing) {
+      existing.remove();
+      return;
+    }
+    document.querySelectorAll('.color-picker-popover').forEach(el => el.remove());
+
+    const popover = document.createElement('div');
+    popover.className = 'color-picker-popover tab-group-color-popover';
+    const colors = ['blue', 'purple', 'red', 'green', 'orange'];
+    colors.forEach(color => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `color-dot-btn btn-${color} ${groupNode.color === color ? 'active' : ''}`;
+      btn.title = color.charAt(0).toUpperCase() + color.slice(1);
+      btn.addEventListener('click', async (evt) => {
+        evt.stopPropagation();
+        await DBService.updateGroupColor(groupNode.id, color);
+        groupNode.color = color;
+        popover.remove();
+        showToast(`Group color updated to ${color}`);
+        render();
+      });
+      popover.appendChild(btn);
+    });
+    actions.appendChild(popover);
+  };
+  colorIndicator.addEventListener('click', openColorPicker);
+  colorBtn.addEventListener('click', openColorPicker);
+
+  // Add tab to this group
+  header.querySelector('.tab-group-add-tab-btn').addEventListener('click', async (e) => {
+    e.stopPropagation();
+    await handleAddCurrentTab(groupNode.id);
+  });
+
+  // Add sub-group
+  header.querySelector('.tab-group-add-subgroup-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleTabGroupForm(groupNode.id, groupNode.title);
+  });
+
+  // Delete Group
+  header.querySelector('.tab-group-delete-btn').addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const count = getGroupTotalCount(groupNode);
+    if (count > 0) {
+      const keepItems = confirm(`Delete group "${groupNode.title}"?\n\n- Click OK to delete the group but KEEP all items (move to collection root).\n- Click Cancel to abort.`);
+      if (keepItems) {
+        await DBService.deleteGroup(groupNode.id, false);
+        showToast("Group deleted (tabs retained)");
+        render();
+      }
+    } else {
+      await DBService.deleteGroup(groupNode.id, false);
+      showToast("Group deleted");
+      render();
+    }
+  });
+
+  // Drag and Drop for Group Header
+  header.addEventListener('dragstart', (e) => {
+    e.stopPropagation();
+    wrapper.classList.add('dragging');
+    draggedGroupId = groupNode.id;
+    draggedType = 'group';
+    e.dataTransfer.effectAllowed = 'move';
+  });
+
+  header.addEventListener('dragend', () => {
+    wrapper.classList.remove('dragging');
+    draggedGroupId = null;
+    draggedType = null;
+    document.querySelectorAll('.tab-group-wrapper').forEach(el => el.classList.remove('group-drag-hover', 'group-drop-nested-hover'));
+  });
+
+  // Drag and drop target on group wrapper
+  wrapper.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (draggedType === 'item') {
+      wrapper.classList.add('group-drag-hover');
+    } else if (draggedType === 'group' && draggedGroupId !== groupNode.id) {
+      wrapper.classList.add('group-drop-nested-hover');
+    }
+  });
+
+  wrapper.addEventListener('dragleave', (e) => {
+    if (!wrapper.contains(e.relatedTarget)) {
+      wrapper.classList.remove('group-drag-hover', 'group-drop-nested-hover');
+    }
+  });
+
+  wrapper.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    wrapper.classList.remove('group-drag-hover', 'group-drop-nested-hover');
+
+    if (draggedType === 'item' && draggedItemId) {
+      await DBService.moveItemToGroup(draggedItemId, groupNode.id);
+      showToast(`Moved to "${groupNode.title}"`);
+      render();
+    } else if (draggedType === 'group' && draggedGroupId && draggedGroupId !== groupNode.id) {
+      try {
+        await DBService.moveGroupToParent(draggedGroupId, groupNode.id);
+        showToast(`Nested into "${groupNode.title}"`);
+        render();
+      } catch (err) {
+        showToast(err.message || "Cannot nest group.");
+      }
+    }
+  });
+
+  wrapper.appendChild(header);
+
+  // Content body
+  const content = document.createElement('div');
+  const groupViewMode = groupNode.viewMode || 'list';
+  content.className = `tab-group-content ${groupViewMode === 'grid' ? 'grid-view' : 'list-view'} ${groupNode.collapsed ? 'collapsed' : ''}`;
+
+  // Recursively render child groups
+  if (groupNode.childGroups && groupNode.childGroups.length > 0) {
+    groupNode.childGroups.forEach(child => {
+      content.appendChild(renderTabGroupNode(child, level + 1));
+    });
+  }
+
+  // Render items inside this group
+  if (groupNode.items && groupNode.items.length > 0) {
+    groupNode.items.forEach(item => {
+      if (item.type === 'note') {
+        content.appendChild(createNoteCardElement(item));
+      } else {
+        content.appendChild(createLinkCardElement(item));
+      }
+    });
+  }
+
+  // Empty drop hint if no children and no items
+  if ((!groupNode.childGroups || groupNode.childGroups.length === 0) && (!groupNode.items || groupNode.items.length === 0)) {
+    const hint = document.createElement('div');
+    hint.className = 'tab-group-empty-hint';
+    hint.textContent = 'Drop tabs here or click + Tab';
+    content.appendChild(hint);
+  }
+
+  wrapper.appendChild(content);
+  return wrapper;
+}
+
+// Helper: Create Note Card Element
+function createNoteCardElement(item) {
+  const card = document.createElement('div');
+  card.className = `note-card note-${item.color || 'yellow'}`;
+  card.dataset.id = item.id;
+  
+  const checkboxHTML = selectionModeActive ? `
+    <div class="item-checkbox-wrapper">
+      <input type="checkbox" class="item-checkbox" data-id="${item.id}" ${selectedItemIds.has(item.id) ? 'checked' : ''} />
+    </div>
+  ` : '';
+
+  card.innerHTML = `
+    ${checkboxHTML}
+    <div class="note-content" contenteditable="${selectionModeActive ? 'false' : 'true'}" placeholder="Write a note...">${escapeHTML(item.content)}</div>
+    <div class="note-footer">
+      <div class="note-color-picker">
+        <div class="color-dot dot-yellow ${item.color === 'yellow' || !item.color ? 'active' : ''}" data-color="yellow" title="Yellow"></div>
+        <div class="color-dot dot-blue ${item.color === 'blue' ? 'active' : ''}" data-color="blue" title="Blue"></div>
+        <div class="color-dot dot-green ${item.color === 'green' ? 'active' : ''}" data-color="green" title="Green"></div>
+        <div class="color-dot dot-pink ${item.color === 'pink' ? 'active' : ''}" data-color="pink" title="Pink"></div>
+        <div class="color-dot dot-purple ${item.color === 'purple' ? 'active' : ''}" data-color="purple" title="Purple"></div>
+      </div>
+      <button class="note-delete-btn" title="Delete Note">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+          <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+        </svg>
+      </button>
+    </div>
+  `;
+  
+  const contentEl = card.querySelector('.note-content');
+  
+  card.addEventListener('click', (e) => {
+    if (selectionModeActive) {
+      e.preventDefault();
+      e.stopPropagation();
+      const checkbox = card.querySelector('.item-checkbox');
+      if (checkbox) {
+        checkbox.checked = !checkbox.checked;
+        toggleItemSelection(item.id, checkbox.checked);
+      }
+    }
+  });
+  
+  const checkboxEl = card.querySelector('.item-checkbox');
+  if (checkboxEl) {
+    checkboxEl.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleItemSelection(item.id, checkboxEl.checked);
+    });
+  }
+  
+  contentEl.addEventListener('blur', async () => {
+    const newText = contentEl.innerText.trim();
+    if (newText !== item.content) {
+      await DBService.updateNoteContent(item.id, newText);
+      item.content = newText;
+      showToast("Note saved");
+    }
+  });
+  
+  contentEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' || (e.key === 'Enter' && e.shiftKey)) {
+      contentEl.blur();
+      e.preventDefault();
+    }
+  });
+  
+  const dots = card.querySelectorAll('.color-dot');
+  dots.forEach(dot => {
+    dot.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const newColor = dot.dataset.color;
+      await DBService.updateNoteColor(item.id, newColor);
+      
+      dots.forEach(d => d.classList.remove('active'));
+      dot.classList.add('active');
+      
+      card.className = `note-card note-${newColor}`;
+      item.color = newColor;
+      showToast("Color updated");
+    });
+  });
+  
+  card.querySelector('.note-delete-btn').addEventListener('click', async (e) => {
+    e.stopPropagation();
+    if (confirm("Are you sure you want to delete this note?")) {
+      await DBService.deleteItem(item.id);
+      showToast("Removed note");
+      render();
+    }
+  });
+  
+  card.setAttribute('draggable', 'true');
+  
+  card.addEventListener('dragstart', (e) => {
+    card.classList.add('dragging');
+    draggedItemId = item.id;
+    draggedType = 'item';
+    e.dataTransfer.effectAllowed = 'move';
+  });
+  
+  card.addEventListener('dragend', () => {
+    card.classList.remove('dragging');
+    draggedItemId = null;
+    draggedType = null;
+    document.querySelectorAll('.item-card, .note-card').forEach(el => el.classList.remove('drag-hover'));
+  });
+  
+  card.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    if (draggedType === 'item' && draggedItemId !== item.id) {
+      card.classList.add('drag-hover');
+    }
+  });
+  
+  card.addEventListener('dragleave', () => {
+    card.classList.remove('drag-hover');
+  });
+  
+  card.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    card.classList.remove('drag-hover');
+    
+    if (draggedType === 'item' && draggedItemId && draggedItemId !== item.id) {
+      await reorderItems(activeCollectionId, draggedItemId, item.id);
+      render();
+    }
+  });
+  
+  return card;
+}
+
+// Helper: Create Link Card Element
+function createLinkCardElement(item) {
+  const card = document.createElement('div');
+  card.className = `item-card ${item.itemTheme ? `item-theme-${item.itemTheme}` : ''}`;
+  card.dataset.id = item.id;
+  
+  const domain = getDomainName(item.url);
+  const formattedDate = new Date(item.created).toLocaleDateString(undefined, { 
+    month: 'short', 
+    day: 'numeric' 
+  });
+  
+  let faviconSrc = "";
+  if (chrome.runtime && chrome.runtime.id) {
+    faviconSrc = `chrome-extension://${chrome.runtime.id}/_favicon/?pageUrl=${encodeURIComponent(item.url)}&size=32`;
+  } else {
+    faviconSrc = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+  }
+
+  const fallbackChar = domain ? domain[0].toUpperCase() : 'W';
+
+  const checkboxHTML = selectionModeActive ? `
+    <div class="item-checkbox-wrapper">
+      <input type="checkbox" class="item-checkbox" data-id="${item.id}" ${selectedItemIds.has(item.id) ? 'checked' : ''} />
+    </div>
+  ` : '';
+
+  card.innerHTML = `
+    ${checkboxHTML}
+    <div class="item-thumbnail-container">
+      ${item.thumbnail ? `<img class="item-thumbnail" src="${escapeHTML(item.thumbnail)}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />` : ''}
+      <div class="thumbnail-fallback" style="${item.thumbnail ? 'display: none;' : ''}">
+        <span>${fallbackChar}</span>
+      </div>
+    </div>
+    <img class="item-favicon" src="${faviconSrc}" alt="" style="display:none;" 
+      onload="this.style.display='inline-block'; if(this.nextElementSibling) this.nextElementSibling.style.display='none';" 
+      onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='inline-flex';" />
+    <div class="item-favicon-fallback" style="display:inline-flex; width:16px; height:16px; align-items:center; justify-content:center; background:var(--primary-light); color:var(--primary-color); border-radius:2px; font-size:10px; font-weight:bold; margin-top:3px; flex-shrink:0;">
+      ${domain ? domain[0].toUpperCase() : 'W'}
+    </div>
+    <div class="item-details">
+      <a class="item-title" href="${escapeHTML(item.url)}" target="_blank" title="${escapeHTML(item.title)}">${escapeHTML(item.title)}</a>
+      <div class="item-meta">
+        <span class="item-domain">${escapeHTML(domain)}</span>
+        <span>&bull;</span>
+        <span class="item-date">${formattedDate}</span>
+      </div>
+      <div class="link-note-preview ${item.linkNote ? '' : 'hidden'}">${escapeHTML(item.linkNote || '')}</div>
+    </div>
+    <div class="item-actions">
+      <button class="icon-button-small edit-link-note-btn ${item.linkNote ? 'has-note' : ''}" title="${item.linkNote ? 'Edit Tab Note' : 'Add Tab Note'}" data-id="${item.id}">
+        <svg viewBox="0 0 24 24" width="14" height="14">
+          <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25z"/>
+          <path d="M20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+        </svg>
+      </button>
+      <button class="icon-button-small change-item-theme-btn ${item.itemTheme ? 'has-theme' : ''}" title="Change Tab Color" data-id="${item.id}">
+        <svg viewBox="0 0 24 24" width="14" height="14">
+          <path d="M12 3a9 9 0 0 0 0 18c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zM6.5 12C5.67 12 5 11.33 5 10.5S5.67 9 6.5 9 8 9.67 8 10.5 7.33 12 6.5 12zm3-4C8.67 8 8 7.33 8 6.5S8.67 5 9.5 5s1.5.67 1.5 1.5S10.33 8 9.5 8zm5 0c-.83 0-1.5-.67-1.5-1.5S13.67 5 14.5 5s1.5.67 1.5 1.5S15.33 8 14.5 8zm3 4c-.83 0-1.5-.67-1.5-1.5S16.67 9 17.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>
+        </svg>
+      </button>
+      <button class="icon-button-small delete-item-btn" title="Delete Link" data-id="${item.id}">
+        <svg viewBox="0 0 24 24" width="14" height="14">
+          <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+        </svg>
+      </button>
+    </div>
+    <div class="link-note-editor hidden">
+      <textarea class="link-note-input" maxlength="500" placeholder="Add a note for this saved tab...">${escapeHTML(item.linkNote || '')}</textarea>
+      <div class="link-note-actions">
+        <button class="btn btn-secondary cancel-link-note-btn">Cancel</button>
+        <button class="btn btn-primary save-link-note-btn">Save Note</button>
+      </div>
+    </div>
+  `;
+  
+  card.addEventListener('click', (e) => {
+    if (selectionModeActive) {
+      e.preventDefault();
+      e.stopPropagation();
+      const checkbox = card.querySelector('.item-checkbox');
+      if (checkbox) {
+        checkbox.checked = !checkbox.checked;
+        toggleItemSelection(item.id, checkbox.checked);
+      }
+      return;
+    }
+    if (e.target.closest('.delete-item-btn') || e.target.closest('.edit-link-note-btn') || e.target.closest('.change-item-theme-btn') || e.target.closest('.item-theme-popover') || e.target.closest('.link-note-editor')) return;
+    if (window.getSelection().toString()) return;
+    
+    e.preventDefault();
+    if (chrome.tabs) {
+      chrome.tabs.create({ url: item.url });
+    } else {
+      window.open(item.url, '_blank');
+    }
+  });
+  
+  const checkboxEl = card.querySelector('.item-checkbox');
+  if (checkboxEl) {
+    checkboxEl.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleItemSelection(item.id, checkboxEl.checked);
+    });
+  }
+
+  const noteEditor = card.querySelector('.link-note-editor');
+  const noteInput = card.querySelector('.link-note-input');
+  const notePreview = card.querySelector('.link-note-preview');
+  const editNoteBtn = card.querySelector('.edit-link-note-btn');
+
+  if (editNoteBtn && noteEditor && noteInput) {
+    editNoteBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      noteEditor.classList.toggle('hidden');
+      if (!noteEditor.classList.contains('hidden')) {
+        noteInput.focus();
+        noteInput.setSelectionRange(noteInput.value.length, noteInput.value.length);
+      }
+    });
+  }
+
+  const saveNoteBtn = card.querySelector('.save-link-note-btn');
+  if (saveNoteBtn && noteInput && noteEditor) {
+    saveNoteBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const newNote = noteInput.value.trim();
+      await DBService.updateLinkNote(item.id, newNote);
+      item.linkNote = newNote;
+
+      if (notePreview) {
+        notePreview.textContent = newNote;
+        notePreview.classList.toggle('hidden', !newNote);
+      }
+      if (editNoteBtn) {
+        editNoteBtn.classList.toggle('has-note', !!newNote);
+        editNoteBtn.title = newNote ? 'Edit Tab Note' : 'Add Tab Note';
+      }
+
+      noteEditor.classList.add('hidden');
+      showToast(newNote ? 'Tab note saved' : 'Tab note cleared');
+    });
+  }
+
+  const cancelNoteBtn = card.querySelector('.cancel-link-note-btn');
+  if (cancelNoteBtn && noteInput && noteEditor) {
+    cancelNoteBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      noteInput.value = item.linkNote || '';
+      noteEditor.classList.add('hidden');
+    });
+  }
+
+  if (noteInput) {
+    noteInput.addEventListener('click', (e) => e.stopPropagation());
+    noteInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        noteInput.value = item.linkNote || '';
+        noteEditor.classList.add('hidden');
+        e.preventDefault();
+      }
+    });
+  }
+
+  const themeBtn = card.querySelector('.change-item-theme-btn');
+  if (themeBtn) {
+    themeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+
+      const existingPopover = card.querySelector('.item-theme-popover');
+      if (existingPopover) {
+        existingPopover.remove();
+        return;
+      }
+
+      document.querySelectorAll('.item-theme-popover').forEach(el => el.remove());
+      const popover = document.createElement('div');
+      popover.className = 'item-theme-popover';
+      const themes = [
+        { id: '', label: 'Default' },
+        { id: 'blue', label: 'Blue' },
+        { id: 'green', label: 'Green' },
+        { id: 'yellow', label: 'Yellow' },
+        { id: 'pink', label: 'Pink' },
+        { id: 'purple', label: 'Purple' }
+      ];
+
+      themes.forEach(theme => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `item-theme-dot item-theme-dot-${theme.id || 'default'} ${(item.itemTheme || '') === theme.id ? 'active' : ''}`;
+        btn.title = theme.label;
+        btn.addEventListener('click', async (event) => {
+          event.stopPropagation();
+          await DBService.updateItemTheme(item.id, theme.id);
+          item.itemTheme = theme.id;
+
+          card.className = `item-card ${theme.id ? `item-theme-${theme.id}` : ''}`;
+          themeBtn.classList.toggle('has-theme', !!theme.id);
+          popover.remove();
+          showToast(theme.id ? `Tab color updated to ${theme.label}` : 'Tab color reset');
+        });
+        popover.appendChild(btn);
+      });
+
+      card.appendChild(popover);
+    });
+  }
+  
+  card.querySelector('.delete-item-btn').addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const id = e.currentTarget.dataset.id;
+    await DBService.deleteItem(id);
+    showToast("Removed item");
+    render();
+  });
+  
+  card.setAttribute('draggable', 'true');
+  
+  card.addEventListener('dragstart', (e) => {
+    card.classList.add('dragging');
+    draggedItemId = item.id;
+    draggedType = 'item';
+    e.dataTransfer.effectAllowed = 'move';
+  });
+  
+  card.addEventListener('dragend', () => {
+    card.classList.remove('dragging');
+    draggedItemId = null;
+    draggedType = null;
+    document.querySelectorAll('.item-card, .note-card').forEach(el => el.classList.remove('drag-hover'));
+  });
+  
+  card.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    if (draggedType === 'item' && draggedItemId !== item.id) {
+      card.classList.add('drag-hover');
+    }
+  });
+  
+  card.addEventListener('dragleave', () => {
+    card.classList.remove('drag-hover');
+  });
+  
+  card.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    card.classList.remove('drag-hover');
+    
+    if (draggedType === 'item' && draggedItemId && draggedItemId !== item.id) {
+      await reorderItems(activeCollectionId, draggedItemId, item.id);
+      render();
+    }
+  });
+  
+  return card;
 }
 
 // --- Action Handlers ---
@@ -1707,6 +2429,69 @@ async function handleCreateCollection() {
   } catch (err) {
     console.error("Create collection error:", err);
     showToast("Failed to create collection.");
+  }
+}
+
+// Toggle Tab Group Creation Form
+function toggleTabGroupForm(parentGroupId = null, parentTitle = '') {
+  const form = document.getElementById('inline-tab-group-form');
+  const input = document.getElementById('new-tab-group-input');
+  const parentIdInput = document.getElementById('new-tab-group-parent-id');
+  if (!form || !input) return;
+
+  const isHidden = form.classList.contains('hidden');
+  if (isHidden) {
+    if (parentIdInput) parentIdInput.value = parentGroupId || '';
+    input.value = '';
+    input.placeholder = parentTitle ? `Sub-group in "${parentTitle}"...` : 'Enter tab group name...';
+    form.classList.remove('hidden');
+    input.focus();
+  } else {
+    // If already open, but user clicked "+ Sub-group" on a specific group
+    if (parentGroupId && parentIdInput && parentIdInput.value !== parentGroupId) {
+      parentIdInput.value = parentGroupId;
+      input.value = '';
+      input.placeholder = `Sub-group in "${parentTitle}"...`;
+      input.focus();
+    } else {
+      form.classList.add('hidden');
+      if (parentIdInput) parentIdInput.value = '';
+      input.value = '';
+    }
+  }
+}
+
+// Create Tab Group
+async function handleCreateTabGroup() {
+  if (!activeCollectionId) {
+    showToast("Please select a collection first.");
+    return;
+  }
+
+  const input = document.getElementById('new-tab-group-input');
+  const parentIdInput = document.getElementById('new-tab-group-parent-id');
+  if (!input) return;
+
+  const title = input.value.trim();
+  if (!title) {
+    showToast("Tab group name cannot be empty.");
+    input.focus();
+    return;
+  }
+
+  const parentGroupId = (parentIdInput && parentIdInput.value) ? parentIdInput.value : null;
+
+  try {
+    await DBService.addGroup(activeCollectionId, title, parentGroupId);
+    const form = document.getElementById('inline-tab-group-form');
+    if (form) form.classList.add('hidden');
+    input.value = '';
+    if (parentIdInput) parentIdInput.value = '';
+    showToast(`Created tab group "${title}"`);
+    await render();
+  } catch (err) {
+    console.error("Create tab group error:", err);
+    showToast("Failed to create tab group.");
   }
 }
 
@@ -1816,9 +2601,9 @@ async function captureActiveTabThumbnail(activeTab) {
   }
 }
 
-async function handleAddCurrentTab() {
+async function handleAddCurrentTab(targetGroupId = null) {
   const btn = document.getElementById('add-current-tab-btn');
-  btn.disabled = true;
+  if (btn) btn.disabled = true;
   
   try {
     let activeTab = null;
@@ -1843,7 +2628,7 @@ async function handleAddCurrentTab() {
     // Filter out edge internal extensions or blank pages where collections cannot save
     if (!activeTab.url || activeTab.url.startsWith('chrome-extension://')) {
       showToast("Cannot add extension or internal system tabs.");
-      btn.disabled = false;
+      if (btn) btn.disabled = false;
       return;
     }
 
@@ -1902,16 +2687,51 @@ async function handleAddCurrentTab() {
       console.warn("Failed to extract thumbnail:", err);
     }
 
+    let finalGroupId = targetGroupId;
+    let groupTitle = "";
+
+    if (finalGroupId) {
+      const items = await DBService.getItems(targetCollectionId);
+      const grp = items.find(i => i.id === finalGroupId);
+      if (grp) groupTitle = grp.title;
+    } else if (activeTab.groupId !== undefined && activeTab.groupId > -1 && chrome.tabGroups && chrome.tabGroups.get) {
+      // Auto-detect browser tab group
+      try {
+        const bgGroup = await chrome.tabGroups.get(activeTab.groupId);
+        if (bgGroup && bgGroup.title) {
+          const colItems = await DBService.getItems(targetCollectionId);
+          let matchGroup = colItems.find(i => i.type === 'group' && i.title.toLowerCase() === bgGroup.title.trim().toLowerCase());
+          if (!matchGroup) {
+            const colorMap = {
+              'grey': 'blue', 'blue': 'blue', 'red': 'red', 'yellow': 'orange',
+              'green': 'green', 'pink': 'red', 'purple': 'purple', 'cyan': 'blue', 'orange': 'orange'
+            };
+            const grpColor = colorMap[bgGroup.color] || 'blue';
+            matchGroup = await DBService.addGroup(targetCollectionId, bgGroup.title.trim(), null, grpColor);
+          }
+          finalGroupId = matchGroup.id;
+          groupTitle = matchGroup.title;
+        }
+      } catch (err) {
+        // Tab group query fallback
+      }
+    }
+
     // Save item
     await DBService.addItem(
       targetCollectionId,
       activeTab.title,
       activeTab.url,
       activeTab.favIconUrl || "",
-      thumbnail
+      thumbnail,
+      finalGroupId
     );
     
-    showToast(`Added to "${collectionName}"`);
+    if (groupTitle) {
+      showToast(`Added to "${groupTitle}" in ${collectionName}`);
+    } else {
+      showToast(`Added to "${collectionName}"`);
+    }
     
     // If in Master View, dynamically refresh the count on card. 
     // If in Detail View, dynamically render the new item.
@@ -1921,7 +2741,7 @@ async function handleAddCurrentTab() {
     console.error("Add current tab error:", err);
     showToast("Error saving current tab.");
   } finally {
-    btn.disabled = false;
+    if (btn) btn.disabled = false;
   }
 }
 
@@ -2401,17 +3221,17 @@ async function handleSearch(e) {
   
   try {
     const allCollections = await DBService.getAllCollections();
+    const allItems = await DBService.getAllItems();
     let matchingCols = [];
     let groupedItems = {};
     
     if (isProUser) {
-      const allItems = await DBService.getAllItems();
-      
       // Filter matching collections
       matchingCols = allCollections.filter(col => col.name.toLowerCase().includes(query));
       
-      // Filter matching items
+      // Filter matching content items
       const matchingItems = allItems.filter(item => {
+        if (item.type === 'group') return false;
         if (item.type === 'note') {
           return (item.content || "").toLowerCase().includes(query);
         } else {
@@ -2435,6 +3255,7 @@ async function handleSearch(e) {
       } else if (preSearchView.view === 'detail' && preSearchView.collectionId) {
         const localItems = await DBService.getItems(preSearchView.collectionId);
         const matchingItems = localItems.filter(item => {
+          if (item.type === 'group') return false;
           if (item.type === 'note') {
             return (item.content || "").toLowerCase().includes(query);
           } else {
@@ -2450,13 +3271,13 @@ async function handleSearch(e) {
       }
     }
     
-    renderSearchResults(matchingCols, groupedItems, allCollections, query);
+    renderSearchResults(matchingCols, groupedItems, allCollections, query, allItems);
   } catch (err) {
     console.error("Global search query error:", err);
   }
 }
 
-function renderSearchResults(matchingCols, groupedItems, allCollections, query) {
+function renderSearchResults(matchingCols, groupedItems, allCollections, query, allItems = []) {
   const container = document.getElementById('search-results-container');
   if (!container) return;
   
@@ -2491,6 +3312,12 @@ function renderSearchResults(matchingCols, groupedItems, allCollections, query) 
     return;
   }
   
+  // Build map of groups for quick badge lookup
+  const groupMap = new Map();
+  if (Array.isArray(allItems)) {
+    allItems.filter(i => i.type === 'group').forEach(g => groupMap.set(g.id, g.title));
+  }
+
   // 1. Render Matching Collections
   if (hasCols) {
     const colSection = document.createElement('div');
@@ -2503,6 +3330,7 @@ function renderSearchResults(matchingCols, groupedItems, allCollections, query) 
     matchingCols.forEach(col => {
       const card = document.createElement('div');
       card.className = `collection-card col-color-${col.color || 'blue'}`;
+      card.dataset.id = col.id;
       card.innerHTML = `
         <div class="collection-card-left">
           <div class="collection-icon-box">
@@ -2511,12 +3339,9 @@ function renderSearchResults(matchingCols, groupedItems, allCollections, query) 
             </svg>
           </div>
           <div class="collection-info">
-            <span class="collection-name">${escapeHTML(col.name)}</span>
+            <span class="collection-name" title="${escapeHTML(col.name)}">${escapeHTML(col.name)}</span>
             <span class="collection-count">${col.count} ${col.count === 1 ? 'item' : 'items'}</span>
           </div>
-        </div>
-        <div class="collection-card-actions" style="opacity: 1;">
-          <span class="search-group-header-right">View</span>
         </div>
       `;
       card.addEventListener('click', () => {
@@ -2572,13 +3397,19 @@ function renderSearchResults(matchingCols, groupedItems, allCollections, query) 
       itemsWrapper.className = 'search-group-items';
       
       groupedItems[colId].forEach(item => {
+        const groupName = item.groupId && groupMap.has(item.groupId) ? groupMap.get(item.groupId) : '';
+        const groupBadge = groupName ? `<span class="search-item-group-badge">📁 ${escapeHTML(groupName)}</span>` : '';
+
         if (item.type === 'note') {
           // Render note card
           const card = document.createElement('div');
           card.className = `note-card note-${item.color || 'yellow'}`;
           card.innerHTML = `
             <div class="note-content" style="max-height: 80px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;">${escapeHTML(item.content)}</div>
-            <div class="note-footer" style="margin-top: 4px; font-size: 9px; color: var(--text-tertiary);">Note</div>
+            <div class="note-footer" style="margin-top: 4px; font-size: 9px; color: var(--text-tertiary); display: flex; align-items: center; justify-content: space-between;">
+              <span>Note</span>
+              ${groupBadge}
+            </div>
           `;
           card.addEventListener('click', () => {
             // Take user to the collection detail view
@@ -2606,10 +3437,11 @@ function renderSearchResults(matchingCols, groupedItems, allCollections, query) 
             <div class="item-favicon-fallback" style="display:inline-flex; width:16px; height:16px; align-items:center; justify-content:center; background:var(--primary-light); color:var(--primary-color); border-radius:2px; font-size:10px; font-weight:bold; margin-top:3px; flex-shrink:0;">
               ${domain ? domain[0].toUpperCase() : 'W'}
             </div>
-            <div class="item-details" style="margin-left: 8px;">
+            <div class="item-details" style="margin-left: 8px; min-width: 0; flex: 1;">
               <a class="item-title" href="${escapeHTML(item.url)}" target="_blank" title="${escapeHTML(item.title)}">${escapeHTML(item.title)}</a>
-              <div class="item-meta" style="font-size: 9px;">
+              <div class="item-meta" style="font-size: 9px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap;">
                 <span class="item-domain">${escapeHTML(domain)}</span>
+                ${groupBadge}
               </div>
               <div class="link-note-preview ${item.linkNote ? '' : 'hidden'}">${escapeHTML(item.linkNote || '')}</div>
             </div>
@@ -2823,58 +3655,82 @@ async function handleBulkMove() {
   if (selectedItemIds.size === 0) return;
   
   const collections = await DBService.getAllCollections();
-  const otherCollections = collections.filter(c => c.id !== activeCollectionId);
+  const allItems = await DBService.getAllItems();
   
   const moveListContainer = document.getElementById('move-collections-list');
   if (!moveListContainer) return;
   
   moveListContainer.innerHTML = '';
-  
-  if (otherCollections.length === 0) {
-    moveListContainer.innerHTML = '<p style="font-size:12px; color:var(--text-secondary); text-align:center; padding:10px 0;">No other collections found. Create a new collection first.</p>';
-  } else {
-    otherCollections.forEach(col => {
-      const itemEl = document.createElement('div');
-      itemEl.className = 'move-collection-item';
-      itemEl.innerHTML = `
-        <svg viewBox="0 0 24 24" width="16" height="16">
-          <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
-        </svg>
-        <span>${escapeHTML(col.name)}</span>
-      `;
-      itemEl.addEventListener('click', async () => {
-        try {
-          const transaction = db.transaction(['items'], 'readwrite');
-          const store = transaction.objectStore('items');
-          
-          for (const id of selectedItemIds) {
-            const item = await new Promise((res, rej) => {
-              const req = store.get(id);
-              req.onsuccess = () => res(req.result);
-              req.onerror = () => rej(req.error);
-            });
-            
-            if (item) {
-              item.collectionId = col.id;
-              delete item.sortOrder;
-              store.put(item);
-            }
-          }
-          
-          showToast(`Moved ${selectedItemIds.size} items to "${col.name}"`);
-          document.getElementById('move-modal').classList.add('hidden');
-          
-          selectionModeActive = false;
-          selectedItemIds.clear();
-          render();
-        } catch (err) {
-          console.error("Bulk move error:", err);
-          showToast("Failed to move items.");
+
+  const executeMove = async (targetColId, targetGroupId, targetName) => {
+    try {
+      const transaction = db.transaction(['items'], 'readwrite');
+      const store = transaction.objectStore('items');
+      
+      for (const id of selectedItemIds) {
+        const item = await new Promise((res, rej) => {
+          const req = store.get(id);
+          req.onsuccess = () => res(req.result);
+          req.onerror = () => rej(req.error);
+        });
+        
+        if (item && item.type !== 'group') {
+          item.collectionId = targetColId;
+          item.groupId = targetGroupId || null;
+          delete item.sortOrder;
+          store.put(item);
         }
+      }
+      
+      showToast(`Moved ${selectedItemIds.size} items to "${targetName}"`);
+      document.getElementById('move-modal').classList.add('hidden');
+      
+      selectionModeActive = false;
+      selectedItemIds.clear();
+      render();
+    } catch (err) {
+      console.error("Bulk move error:", err);
+      showToast("Failed to move items.");
+    }
+  };
+
+  // Helper to add group options recursively
+  const addGroupOptions = (colId, parentGroupId, level) => {
+    const childGroups = allItems.filter(i => i.collectionId === colId && i.type === 'group' && (i.parentGroupId || null) === parentGroupId);
+    childGroups.forEach(grp => {
+      const grpEl = document.createElement('div');
+      grpEl.className = 'move-group-item';
+      grpEl.dataset.level = level;
+      grpEl.innerHTML = `
+        <span class="move-group-dot dot-${grp.color || 'blue'}"></span>
+        <span class="move-group-title">📁 ${escapeHTML(grp.title)}</span>
+      `;
+      grpEl.addEventListener('click', () => {
+        executeMove(colId, grp.id, grp.title);
       });
-      moveListContainer.appendChild(itemEl);
+      moveListContainer.appendChild(grpEl);
+      addGroupOptions(colId, grp.id, level + 1);
     });
-  }
+  };
+
+  collections.forEach(col => {
+    // Collection Root Option
+    const itemEl = document.createElement('div');
+    itemEl.className = 'move-collection-item';
+    itemEl.innerHTML = `
+      <svg viewBox="0 0 24 24" width="16" height="16">
+        <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
+      </svg>
+      <span>${escapeHTML(col.name)} ${col.id === activeCollectionId ? '(Root / Ungrouped)' : ''}</span>
+    `;
+    itemEl.addEventListener('click', () => {
+      executeMove(col.id, null, col.name);
+    });
+    moveListContainer.appendChild(itemEl);
+
+    // List tab groups in this collection
+    addGroupOptions(col.id, null, 1);
+  });
   
   document.getElementById('move-modal').classList.remove('hidden');
 }

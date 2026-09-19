@@ -58,6 +58,26 @@
       </div>
     </header>
 
+    <!-- Pin Extension Alert Banner -->
+    <div id="pin-extension-banner" class="pin-banner hidden">
+      <div class="pin-banner-content">
+        <div class="pin-banner-icon">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" x2="12" y1="17" y2="22"></line>
+            <path d="M5 17h14v-1.76a2 2 0 0 0-.44-1.24l-2.78-3.5A2 2 0 0 1 15 9.26V5a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4.26a2 2 0 0 1-.78 1.24l-2.78 3.5a2 2 0 0 0-.44 1.24Z"></path>
+          </svg>
+        </div>
+        <div class="pin-banner-text">
+          <strong>Pin this sidebar</strong> for quick access. Click the extensions menu <span class="puzzle-icon">🧩</span> and click the pin icon.
+        </div>
+      </div>
+      <button id="close-pin-banner-btn" class="pin-banner-close" aria-label="Dismiss banner" title="Dismiss">
+        <svg viewBox="0 0 24 24" width="14" height="14">
+          <path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+        </svg>
+      </button>
+    </div>
+
     <!-- Toolbar Actions -->
     <div class="toolbar">
       <button id="add-current-tab-btn" class="btn btn-primary" title="Add Current Tab to Collection">
@@ -80,6 +100,13 @@
         </svg>
         Add Note
       </button>
+
+      <button id="add-tab-group-btn" class="btn btn-secondary hidden" title="Add Tab Group in Collection">
+        <svg class="icon-inline" viewBox="0 0 24 24" width="16" height="16">
+          <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+        </svg>
+        New Tab Group
+      </button>
     </div>
 
     <!-- Inline Collection Creation Form (Hidden by default) -->
@@ -92,6 +119,24 @@
           </svg>
         </button>
         <button id="cancel-new-collection-btn" class="btn-icon-cancel" title="Cancel">
+          <svg class="icon" viewBox="0 0 24 24" width="18" height="18">
+            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Inline Tab Group Creation Form (Hidden by default) -->
+    <div id="inline-tab-group-form" class="inline-form hidden">
+      <input type="text" id="new-tab-group-input" placeholder="Enter tab group name..." maxlength="50">
+      <input type="hidden" id="new-tab-group-parent-id" value="">
+      <div class="form-actions">
+        <button id="save-new-tab-group-btn" class="btn-icon-confirm" title="Create Tab Group">
+          <svg class="icon" viewBox="0 0 24 24" width="18" height="18">
+            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+          </svg>
+        </button>
+        <button id="cancel-new-tab-group-btn" class="btn-icon-cancel" title="Cancel">
           <svg class="icon" viewBox="0 0 24 24" width="18" height="18">
             <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
           </svg>
@@ -207,7 +252,7 @@
     <footer id="promo-footer" class="promo-footer hidden" aria-label="Collections Pro promotion">
       <div class="promo-footer-copy">
         <span class="promo-kicker">Early supporter offer</span>
-        <span class="promo-message">Get Lifetime Pro before we move to yearly subscriptions.</span>
+        <span class="promo-message">Get Lifetime Pro now for only $4.99. We are moving to a $10/year subscription soon.</span>
       </div>
       <a id="promo-footer-buy-btn" class="promo-footer-link" href="https://gumroad.com" target="_blank" rel="noopener">Get lifetime</a>
     </footer>

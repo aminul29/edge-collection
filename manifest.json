@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Edge Collections Sidebar",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "Organize your saved pages, links, and notes in a clean, convenient sidebar. Import, export, and manage your collections with ease.",
   "minimum_chrome_version": "114.0",
   "icons": {
@@ -14,6 +14,7 @@
     "sidePanel",
     "storage",
     "tabs",
+    "tabGroups",
     "activeTab",
     "scripting"
   ],
