@@ -618,6 +618,7 @@ body {
 .item-card {
   display: flex;
   align-items: flex-start;
+  flex-wrap: wrap;
   padding: 10px 12px;
   background-color: var(--surface-color);
   border: 1px solid var(--border-color);
@@ -1550,7 +1551,8 @@ body {
   width: 112px;
 }
 
-.items-list.grid-view .link-note-editor {
+.items-list.grid-view .link-note-editor,
+.tab-group-content.grid-view .link-note-editor {
   position: absolute;
   inset: 0;
   z-index: 20;
@@ -1562,11 +1564,13 @@ body {
   flex-direction: column;
 }
 
-.items-list.grid-view .link-note-editor.hidden {
-  display: none !important;
+.items-list.grid-view .link-note-editor.hidden,
+.tab-group-content.grid-view .link-note-editor.hidden {
+  display: none;
 }
 
-.items-list.grid-view .link-note-input {
+.items-list.grid-view .link-note-input,
+.tab-group-content.grid-view .link-note-input {
   flex: 1;
   min-height: 0;
   resize: none;
@@ -2421,6 +2425,7 @@ body {
     .item-card {
       flex-direction: row;
       align-items: flex-start;
+      flex-wrap: wrap;
       padding: 10px 12px;
       border-radius: var(--radius-sm);
       min-height: unset;

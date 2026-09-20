@@ -364,10 +364,11 @@ const DBService = {
       const transaction = db.transaction(['items'], 'readwrite');
       const store = transaction.objectStore('items');
       const now = Date.now();
+      const cleanGroupId = (typeof groupId === 'string' && groupId.trim()) ? groupId.trim() : null;
       const item = {
         id: generateId(),
         collectionId: collectionId,
-        groupId: groupId || null,
+        groupId: cleanGroupId,
         type: "note",
         content: content || "",
         color: color || "yellow",
@@ -1018,7 +1019,7 @@ function setupEventListeners() {
   
   const addNoteBtn = document.getElementById('add-note-btn');
   if (addNoteBtn) {
-    addNoteBtn.addEventListener('click', handleAddNote);
+    addNoteBtn.addEventListener('click', () => handleAddNote());
   }
   
   const toggleViewBtn = document.getElementById('toggle-view-btn');
@@ -1872,6 +1873,11 @@ function renderTabGroupNode(groupNode, level = 0) {
           <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
         </svg>
       </button>
+      <button class="icon-button-small tab-group-add-note-btn" title="Add Note to this Group">
+        <svg viewBox="0 0 24 24" width="13" height="13">
+          <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zM7 7h10v2H7zm0 4h10v2H7zm0 4h7v2H7z"/>
+        </svg>
+      </button>
       <button class="icon-button-small tab-group-add-subgroup-btn" title="Add Sub-Group">
         <svg viewBox="0 0 24 24" width="14" height="14">
           <path d="M20 6h-8l-2-2H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-1 8h-3v3h-2v-3h-3v-2h3V9h2v3h3v2z"/>
@@ -2020,6 +2026,12 @@ function renderTabGroupNode(groupNode, level = 0) {
     await handleAddCurrentTab(groupNode.id);
   });
 
+  // Add note to this group
+  header.querySelector('.tab-group-add-note-btn').addEventListener('click', async (e) => {
+    e.stopPropagation();
+    await handleAddNote(groupNode.id);
+  });
+
   // Add sub-group
   header.querySelector('.tab-group-add-subgroup-btn').addEventListener('click', (e) => {
     e.stopPropagation();
@@ -2121,7 +2133,7 @@ function renderTabGroupNode(groupNode, level = 0) {
   if ((!groupNode.childGroups || groupNode.childGroups.length === 0) && (!groupNode.items || groupNode.items.length === 0)) {
     const hint = document.createElement('div');
     hint.className = 'tab-group-empty-hint';
-    hint.textContent = 'Drop tabs here or click + Tab';
+    hint.textContent = 'Drop items here or click + Tab / + Note';
     content.appendChild(hint);
   }
 
@@ -2315,10 +2327,9 @@ function createLinkCardElement(item) {
       <div class="link-note-preview ${item.linkNote ? '' : 'hidden'}">${escapeHTML(item.linkNote || '')}</div>
     </div>
     <div class="item-actions">
-      <button class="icon-button-small edit-link-note-btn ${item.linkNote ? 'has-note' : ''}" title="${item.linkNote ? 'Edit Tab Note' : 'Add Tab Note'}" data-id="${item.id}">
+      <button class="icon-button-small edit-link-note-btn ${item.linkNote ? 'has-note' : ''}" title="${item.linkNote ? 'Edit Note' : 'Add Note'}" data-id="${item.id}">
         <svg viewBox="0 0 24 24" width="14" height="14">
-          <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25z"/>
-          <path d="M20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+          <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zM7 7h10v2H7zm0 4h10v2H7zm0 4h7v2H7z"/>
         </svg>
       </button>
       <button class="icon-button-small change-item-theme-btn ${item.itemTheme ? 'has-theme' : ''}" title="Change Tab Color" data-id="${item.id}">
@@ -2401,7 +2412,7 @@ function createLinkCardElement(item) {
       }
       if (editNoteBtn) {
         editNoteBtn.classList.toggle('has-note', !!newNote);
-        editNoteBtn.title = newNote ? 'Edit Tab Note' : 'Add Tab Note';
+        editNoteBtn.title = newNote ? 'Edit Note' : 'Add Note';
       }
 
       noteEditor.classList.add('hidden');
@@ -2526,10 +2537,34 @@ function createLinkCardElement(item) {
 // --- Action Handlers ---
 
 // Add Note
-async function handleAddNote() {
+async function handleAddNote(targetGroupId = null) {
   if (!activeCollectionId) return;
   try {
-    const newNote = await DBService.addNote(activeCollectionId, "", "yellow");
+    const cleanGroupId = (typeof targetGroupId === 'string' && targetGroupId.trim()) ? targetGroupId.trim() : null;
+    const newNote = await DBService.addNote(activeCollectionId, "", "yellow", cleanGroupId);
+
+    if (cleanGroupId) {
+      const allItems = await DBService.getAllItems();
+      const grp = allItems.find(i => i.id === cleanGroupId && i.type === 'group');
+      if (grp) {
+        if (grp.collapsed) {
+          await DBService.toggleGroupCollapse(grp.id, false);
+        }
+        let parentId = grp.parentGroupId;
+        while (parentId) {
+          const parent = allItems.find(i => i.id === parentId && i.type === 'group');
+          if (parent) {
+            if (parent.collapsed) {
+              await DBService.toggleGroupCollapse(parent.id, false);
+            }
+            parentId = parent.parentGroupId;
+          } else {
+            break;
+          }
+        }
+      }
+    }
+
     await render();
     // Focus the new note's contenteditable area
     const noteEl = document.querySelector(`.note-card[data-id="${newNote.id}"] .note-content`);
