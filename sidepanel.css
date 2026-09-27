@@ -2832,6 +2832,103 @@ body {
     }
   }
 
+  .cloud-license-helper {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: -2px;
+    margin-bottom: 2px;
+
+    .cloud-license-actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .cloud-buy-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--primary-color);
+      text-decoration: none;
+      transition: color var(--transition-fast);
+
+      &:hover {
+        color: var(--primary-hover);
+        text-decoration: underline;
+      }
+
+      svg {
+        flex-shrink: 0;
+      }
+    }
+
+    .cloud-features-toggle {
+      background: none;
+      border: none;
+      padding: 3px 6px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      border-radius: var(--radius-sm);
+      transition: color var(--transition-fast), background-color var(--transition-fast);
+      font-family: inherit;
+
+      &:hover {
+        color: var(--text-primary);
+        background-color: var(--surface-hover);
+      }
+
+      .chevron-icon {
+        transition: transform var(--transition-fast);
+        flex-shrink: 0;
+      }
+
+      &.expanded .chevron-icon {
+        transform: rotate(180deg);
+      }
+    }
+
+    .cloud-features-dropdown {
+      background-color: var(--surface-hover);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 8px 10px;
+      animation: modalFadeIn var(--transition-fast) ease-out;
+
+      .cloud-features-list {
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin: 0;
+        padding: 0;
+
+        li {
+          display: flex;
+          align-items: flex-start;
+          gap: 6px;
+          font-size: 11px;
+          line-height: 1.35;
+          color: var(--text-secondary);
+
+          svg {
+            flex-shrink: 0;
+            color: var(--success-color);
+            margin-top: 2px;
+          }
+        }
+      }
+    }
+  }
+
   .cloud-submit-btn {
     height: 36px;
     font-weight: 600;

@@ -4422,15 +4422,43 @@ function initCloudSyncUI() {
     });
   }
 
+  const buyProLink = document.getElementById('cloud-buy-pro-link');
+  const featuresToggleBtn = document.getElementById('cloud-features-toggle-btn');
+  const featuresDropdown = document.getElementById('cloud-features-dropdown');
+
+  if (buyProLink && typeof GUMROAD_PRODUCT_URL !== 'undefined') {
+    buyProLink.href = GUMROAD_PRODUCT_URL;
+  }
+
+  if (featuresToggleBtn && featuresDropdown) {
+    featuresToggleBtn.addEventListener('click', () => {
+      const isHidden = featuresDropdown.classList.toggle('hidden');
+      featuresToggleBtn.classList.toggle('expanded', !isHidden);
+      featuresToggleBtn.setAttribute('aria-expanded', !isHidden ? 'true' : 'false');
+    });
+  }
+
   if (closeCloudModalBtn) {
     closeCloudModalBtn.addEventListener('click', () => {
       if (cloudModal) cloudModal.classList.add('hidden');
+      if (featuresDropdown) featuresDropdown.classList.add('hidden');
+      if (featuresToggleBtn) {
+        featuresToggleBtn.classList.remove('expanded');
+        featuresToggleBtn.setAttribute('aria-expanded', 'false');
+      }
     });
   }
 
   if (cloudModal) {
     cloudModal.addEventListener('click', (e) => {
-      if (e.target === cloudModal) cloudModal.classList.add('hidden');
+      if (e.target === cloudModal) {
+        cloudModal.classList.add('hidden');
+        if (featuresDropdown) featuresDropdown.classList.add('hidden');
+        if (featuresToggleBtn) {
+          featuresToggleBtn.classList.remove('expanded');
+          featuresToggleBtn.setAttribute('aria-expanded', 'false');
+        }
+      }
     });
   }
 
@@ -4442,6 +4470,11 @@ function initCloudSyncUI() {
       if (signinForm) signinForm.classList.remove('hidden');
       if (signupForm) signupForm.classList.add('hidden');
       if (signinStatus) signinStatus.classList.add('hidden');
+      if (featuresDropdown) featuresDropdown.classList.add('hidden');
+      if (featuresToggleBtn) {
+        featuresToggleBtn.classList.remove('expanded');
+        featuresToggleBtn.setAttribute('aria-expanded', 'false');
+      }
     });
 
     tabSignup.addEventListener('click', () => {

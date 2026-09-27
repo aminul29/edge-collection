@@ -506,6 +506,47 @@
                 <label for="cloud-signup-license">Gumroad License Key</label>
                 <input type="text" id="cloud-signup-license" placeholder="Paste your Gumroad Pro license key" required>
               </div>
+
+              <!-- Pro Purchase Link & Collapsible Features -->
+              <div class="cloud-license-helper">
+                <div class="cloud-license-actions">
+                  <a id="cloud-buy-pro-link" href="https://aminulist0.gumroad.com/l/fzkozw" target="_blank" rel="noopener noreferrer" class="cloud-buy-link" title="Buy Collections Pro License on Gumroad">
+                    <span>Get Lifetime Pro ($4.99)</span>
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                      <polyline points="15 3 21 3 21 9"></polyline>
+                      <line x1="10" y1="14" x2="21" y2="3"></line>
+                    </svg>
+                  </a>
+                  <button type="button" id="cloud-features-toggle-btn" class="cloud-features-toggle" aria-expanded="false" title="Click to view Pro features">
+                    <span>Pro Features</span>
+                    <svg class="chevron-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                  </button>
+                </div>
+                <div id="cloud-features-dropdown" class="cloud-features-dropdown hidden">
+                  <ul class="cloud-features-list">
+                    <li>
+                      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                      <span>Real-time Cloud Sync across devices</span>
+                    </li>
+                    <li>
+                      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                      <span>Unlimited collections &amp; notes (Free limit: 5)</span>
+                    </li>
+                    <li>
+                      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                      <span>Import from Microsoft Edge (bing.com/saves)</span>
+                    </li>
+                    <li>
+                      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                      <span>Global search &amp; custom collection colors</span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+
               <button type="submit" id="cloud-signup-submit-btn" class="btn btn-primary cloud-submit-btn">Register &amp; Activate Sync</button>
               <div id="cloud-signup-status" class="cloud-status-msg hidden"></div>
             </form>
