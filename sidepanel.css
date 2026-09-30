@@ -1809,20 +1809,24 @@ body {
 
 /* Update collection-card icon container styles dynamically */
 .collection-card {
-  border-left: 4px solid transparent !important;
+  border-left: 4px solid var(--col-accent, var(--col-blue));
 }
-.collection-card.col-color-blue { border-left-color: var(--col-blue) !important; }
-.collection-card.col-color-purple { border-left-color: var(--col-purple) !important; }
-.collection-card.col-color-red { border-left-color: var(--col-red) !important; }
-.collection-card.col-color-green { border-left-color: var(--col-green) !important; }
-.collection-card.col-color-orange { border-left-color: var(--col-orange) !important; }
+.collection-card.col-color-blue { --col-accent: var(--col-blue); --col-accent-light: var(--col-blue-light); border-left-color: var(--col-blue); }
+.collection-card.col-color-purple { --col-accent: var(--col-purple); --col-accent-light: var(--col-purple-light); border-left-color: var(--col-purple); }
+.collection-card.col-color-red { --col-accent: var(--col-red); --col-accent-light: var(--col-red-light); border-left-color: var(--col-red); }
+.collection-card.col-color-green { --col-accent: var(--col-green); --col-accent-light: var(--col-green-light); border-left-color: var(--col-green); }
+.collection-card.col-color-orange { --col-accent: var(--col-orange); --col-accent-light: var(--col-orange-light); border-left-color: var(--col-orange); }
 
 .collection-card .collection-icon-box {
-  background-color: var(--col-accent-light, var(--primary-light)) !important;
-  color: var(--col-accent, var(--primary-color)) !important;
+  background-color: var(--col-accent-light, var(--primary-light));
+  color: var(--col-accent, var(--primary-color));
 }
 
 /* Detail view active accents */
+.view-panel {
+  --col-accent: var(--primary-color);
+  --col-accent-light: var(--primary-light);
+}
 .view-panel.col-color-blue {
   --col-accent: var(--col-blue);
   --col-accent-light: var(--col-blue-light);
@@ -1845,7 +1849,7 @@ body {
 }
 
 .view-panel .collection-detail-header {
-  border-bottom: 2px solid var(--col-accent, var(--border-color)) !important;
+  border-bottom: 2px solid var(--col-accent, var(--border-color));
 }
 
 /* Collection Card Color Picker Popover */
@@ -1859,6 +1863,7 @@ body {
   box-shadow: var(--shadow-lg);
   padding: 6px;
   display: flex;
+  align-items: center;
   gap: 6px;
   z-index: 999;
   animation: fadeIn var(--transition-fast);
@@ -1878,26 +1883,73 @@ body {
 .color-dot-btn {
   width: 16px;
   height: 16px;
+  min-width: 16px;
+  flex: 0 0 16px;
+  padding: 0;
   border-radius: 50%;
   border: 1.5px solid transparent;
   cursor: pointer;
-  transition: transform var(--transition-fast), border-color var(--transition-fast);
+  outline: none;
+  background: transparent;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transition: transform var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
+
+  &:hover {
+    transform: scale(1.25);
+  }
+
+  &.active {
+    border-color: var(--text-primary);
+    box-shadow: 0 0 0 2px var(--surface-color) inset;
+  }
+
+  &.btn-blue { background-color: var(--col-blue); }
+  &.btn-purple { background-color: var(--col-purple); }
+  &.btn-red { background-color: var(--col-red); }
+  &.btn-green { background-color: var(--col-green); }
+  &.btn-orange { background-color: var(--col-orange); }
 }
 
-.color-dot-btn:hover {
-  transform: scale(1.25);
+.color-picker-divider {
+  width: 1px;
+  height: 14px;
+  background-color: var(--border-color);
+  margin: 0 1px;
+  flex-shrink: 0;
 }
 
-.color-dot-btn.active {
-  border-color: var(--text-primary);
-  box-shadow: 0 0 0 2px var(--surface-color) inset;
+.color-dot-btn.custom-color-btn {
+  background: conic-gradient(from 180deg at 50% 50%, #ff453a, #ff9f0a, #ffd60a, #30d158, #64d2ff, #0a84ff, #bf5af2, #ff453a);
+  border: 1.5px solid rgba(0, 0, 0, 0.12);
+
+  &.active {
+    border-color: var(--text-primary);
+    box-shadow: 0 0 0 2px var(--surface-color) inset;
+  }
 }
 
-.color-dot-btn.btn-blue { background-color: var(--col-blue) !important; }
-.color-dot-btn.btn-purple { background-color: var(--col-purple) !important; }
-.color-dot-btn.btn-red { background-color: var(--col-red) !important; }
-.color-dot-btn.btn-green { background-color: var(--col-green) !important; }
-.color-dot-btn.btn-orange { background-color: var(--col-orange) !important; }
+@media (prefers-color-scheme: dark) {
+  .color-dot-btn.custom-color-btn {
+    border-color: rgba(255, 255, 255, 0.18);
+  }
+}
+
+.custom-color-input-hidden {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+}
 
 /* Detail View Color Picker */
 .detail-color-picker {

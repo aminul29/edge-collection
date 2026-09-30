@@ -1289,7 +1289,7 @@ function setupEventListeners() {
 
   // Dismiss collection color picker popover on click outside
   document.addEventListener('click', (e) => {
-    if (!e.target.closest('.color-picker-popover') && !e.target.closest('.change-color-btn')) {
+    if (!e.target.closest('.color-picker-popover') && !e.target.closest('.change-color-btn') && !e.target.closest('.tab-group-color-btn') && !e.target.closest('.tab-group-color-indicator')) {
       document.querySelectorAll('.color-picker-popover').forEach(el => el.remove());
     }
   });
@@ -1398,6 +1398,147 @@ async function render() {
   }
 }
 
+// --- Collection & Group Color Theme Helpers ---
+const PRESET_COLORS = ['blue', 'purple', 'red', 'green', 'orange'];
+const PRESET_COLOR_MAP = {
+  blue: '#0078d4',
+  purple: '#8764b8',
+  red: '#e81123',
+  green: '#107c41',
+  orange: '#d83b01'
+};
+
+function hexToRgba(hex, alpha = 0.12) {
+  if (!hex || typeof hex !== 'string') return '';
+  let clean = hex.trim().replace(/^#/, '');
+  if (clean.length === 3) {
+    clean = clean.split('').map(ch => ch + ch).join('');
+  }
+  if (clean.length !== 6) return '';
+  const num = parseInt(clean, 16);
+  if (isNaN(num)) return '';
+  const r = (num >> 16) & 255;
+  const g = (num >> 8) & 255;
+  const b = num & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function applyCollectionTheme(element, color) {
+  if (!element) return;
+  PRESET_COLORS.forEach(c => element.classList.remove(`col-color-${c}`));
+
+  if (!color || PRESET_COLORS.includes(color)) {
+    const preset = color || 'blue';
+    element.classList.add(`col-color-${preset}`);
+    element.style.removeProperty('--col-accent');
+    element.style.removeProperty('--col-accent-light');
+    element.style.removeProperty('border-left-color');
+  } else {
+    element.style.setProperty('--col-accent', color);
+    const rgbaLight = hexToRgba(color, 0.12) || `color-mix(in srgb, ${color} 12%, transparent)`;
+    element.style.setProperty('--col-accent-light', rgbaLight);
+    element.style.setProperty('border-left-color', color);
+  }
+}
+
+function createColorPickerPopover({ currentColor, extraClass = '', onSelectColor }) {
+  const popover = document.createElement('div');
+  popover.className = `color-picker-popover ${extraClass}`.trim();
+
+  const isCustomColor = currentColor && !PRESET_COLORS.includes(currentColor);
+
+  // 1. Preset Color Buttons
+  PRESET_COLORS.forEach(color => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    const isActive = currentColor === color || (!currentColor && color === 'blue');
+    btn.className = `color-dot-btn btn-${color} ${isActive ? 'active' : ''}`;
+    btn.title = color.charAt(0).toUpperCase() + color.slice(1);
+
+    btn.addEventListener('click', async (evt) => {
+      evt.stopPropagation();
+      if (!isProUser) {
+        showPaywallModal();
+        return;
+      }
+      if (typeof onSelectColor === 'function') {
+        await onSelectColor(color);
+      }
+    });
+
+    popover.appendChild(btn);
+  });
+
+  // 2. Subtle Divider
+  const divider = document.createElement('div');
+  divider.className = 'color-picker-divider';
+  divider.setAttribute('aria-hidden', 'true');
+  popover.appendChild(divider);
+
+  // 3. Custom Color Button
+  const customBtn = document.createElement('button');
+  customBtn.type = 'button';
+  customBtn.className = `color-dot-btn custom-color-btn ${isCustomColor ? 'active' : ''}`;
+  customBtn.title = isCustomColor
+    ? `Custom Color (${currentColor}) - Click to change`
+    : 'Choose Custom Color...';
+
+  if (isCustomColor) {
+    customBtn.style.backgroundColor = currentColor;
+  }
+
+  // Hidden native color picker input
+  const colorInput = document.createElement('input');
+  colorInput.type = 'color';
+  colorInput.className = 'custom-color-input-hidden';
+  colorInput.tabIndex = -1;
+  colorInput.value = isCustomColor
+    ? currentColor
+    : (PRESET_COLOR_MAP[currentColor || 'blue'] || '#0078d4');
+
+  colorInput.addEventListener('click', (e) => e.stopPropagation());
+
+  customBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!isProUser) {
+      showPaywallModal();
+      return;
+    }
+    if (typeof colorInput.showPicker === 'function') {
+      try {
+        colorInput.showPicker();
+        return;
+      } catch (err) {
+        // Fallback
+      }
+    }
+    colorInput.click();
+  });
+
+  // Live visual preview while adjusting in picker
+  colorInput.addEventListener('input', (e) => {
+    const val = e.target.value;
+    customBtn.style.backgroundColor = val;
+    customBtn.classList.add('active');
+    popover.querySelectorAll('.color-dot-btn:not(.custom-color-btn)').forEach(b => b.classList.remove('active'));
+    customBtn.title = `Custom Color (${val}) - Click to change`;
+  });
+
+  // Commit on selection confirm
+  colorInput.addEventListener('change', async (e) => {
+    e.stopPropagation();
+    const chosenColor = e.target.value;
+    if (typeof onSelectColor === 'function') {
+      await onSelectColor(chosenColor);
+    }
+  });
+
+  popover.appendChild(customBtn);
+  popover.appendChild(colorInput);
+
+  return popover;
+}
+
 // Render Master View (List of collections)
 async function renderCollectionsList() {
   const container = document.getElementById('collections-container');
@@ -1424,7 +1565,8 @@ async function renderCollectionsList() {
     
     filteredCols.forEach(col => {
       const card = document.createElement('div');
-      card.className = `collection-card col-color-${col.color || 'blue'}`;
+      card.className = 'collection-card';
+      applyCollectionTheme(card, col.color);
       card.dataset.id = col.id;
       
       card.innerHTML = `
@@ -1480,21 +1622,14 @@ async function renderCollectionsList() {
           
           document.querySelectorAll('.color-picker-popover').forEach(el => el.remove());
           
-          const popover = document.createElement('div');
-          popover.className = 'color-picker-popover collection-color-popover';
-          
-          const colors = ['blue', 'purple', 'red', 'green', 'orange'];
-          colors.forEach(color => {
-            const btn = document.createElement('button');
-            btn.className = `color-dot-btn btn-${color} ${col.color === color || (!col.color && color === 'blue') ? 'active' : ''}`;
-            btn.title = color.charAt(0).toUpperCase() + color.slice(1);
-            btn.addEventListener('click', async (evt) => {
-              evt.stopPropagation();
+          const popover = createColorPickerPopover({
+            currentColor: col.color,
+            extraClass: 'collection-color-popover',
+            onSelectColor: async (color) => {
               await DBService.updateCollectionColor(col.id, color);
               showToast(`Collection color updated to ${color}`);
               render();
-            });
-            popover.appendChild(btn);
+            }
           });
           
           if (actions) {
@@ -1613,13 +1748,13 @@ async function renderCollectionDetails() {
     
     const detailPanel = document.getElementById('collection-items-view');
     if (detailPanel) {
-      detailPanel.className = 'view-panel col-color-' + (activeCol.color || 'blue');
+      detailPanel.className = 'view-panel';
+      applyCollectionTheme(detailPanel, activeCol.color);
     }
 
     const detailColorPicker = document.getElementById('detail-color-picker');
     if (detailColorPicker) {
       detailColorPicker.innerHTML = '';
-      const colors = ['blue', 'purple', 'red', 'green', 'orange'];
       const activeColor = activeCol.color || 'blue';
 
       const label = document.createElement('span');
@@ -1628,7 +1763,7 @@ async function renderCollectionDetails() {
       detailColorPicker.appendChild(label);
 
       const themeBtn = document.createElement('button');
-      themeBtn.className = `detail-color-menu-btn change-color-btn btn-${activeColor}`;
+      themeBtn.className = `detail-color-menu-btn change-color-btn ${PRESET_COLORS.includes(activeColor) ? `btn-${activeColor}` : 'btn-custom'}`;
       themeBtn.type = 'button';
       themeBtn.title = 'Change collection theme';
       themeBtn.setAttribute('aria-label', 'Change collection theme');
@@ -1638,6 +1773,10 @@ async function renderCollectionDetails() {
           <path d="M7 10l5 5 5-5H7z"/>
         </svg>
       `;
+      const currentDot = themeBtn.querySelector('.detail-color-current');
+      if (currentDot && !PRESET_COLORS.includes(activeColor)) {
+        currentDot.style.backgroundColor = activeColor;
+      }
       themeBtn.addEventListener('click', (e) => {
         e.stopPropagation();
 
@@ -1645,27 +1784,14 @@ async function renderCollectionDetails() {
         document.querySelectorAll('.color-picker-popover').forEach(el => el.remove());
         if (existingPopover) return;
 
-        const popover = document.createElement('div');
-        popover.className = 'color-picker-popover detail-color-popover';
-
-        colors.forEach(color => {
-          const btn = document.createElement('button');
-          btn.className = `color-dot-btn btn-${color} ${activeColor === color ? 'active' : ''}`;
-          btn.title = color.charAt(0).toUpperCase() + color.slice(1);
-          btn.type = 'button';
-          btn.addEventListener('click', async (event) => {
-            event.stopPropagation();
-
-            if (!isProUser) {
-              showPaywallModal();
-              return;
-            }
-
+        const popover = createColorPickerPopover({
+          currentColor: activeCol.color,
+          extraClass: 'detail-color-popover',
+          onSelectColor: async (color) => {
             await DBService.updateCollectionColor(activeCol.id, color);
             showToast(`Theme updated to ${color}`);
             render();
-          });
-          popover.appendChild(btn);
+          }
         });
 
         detailColorPicker.appendChild(popover);
@@ -1843,8 +1969,9 @@ function renderTabGroupNode(groupNode, level = 0) {
   wrapper.className = 'tab-group-wrapper';
   wrapper.dataset.groupId = groupNode.id;
   wrapper.dataset.level = level;
+  const isGroupPreset = PRESET_COLORS.includes(groupNode.color);
   if (groupNode.color) {
-    wrapper.style.setProperty('--group-accent', `var(--col-${groupNode.color})`);
+    wrapper.style.setProperty('--group-accent', isGroupPreset ? `var(--col-${groupNode.color})` : groupNode.color);
   }
 
   // Content body
@@ -1855,7 +1982,10 @@ function renderTabGroupNode(groupNode, level = 0) {
   const totalCount = getGroupTotalCount(groupNode);
 
   const header = document.createElement('div');
-  header.className = `tab-group-header group-header-color-${groupNode.color || 'blue'}`;
+  header.className = `tab-group-header ${isGroupPreset ? `group-header-color-${groupNode.color || 'blue'}` : 'group-header-color-custom'}`;
+  if (!isGroupPreset && groupNode.color) {
+    header.style.setProperty('--group-accent', groupNode.color);
+  }
   header.setAttribute('draggable', 'true');
 
   header.innerHTML = `
@@ -1864,7 +1994,7 @@ function renderTabGroupNode(groupNode, level = 0) {
         <path fill="currentColor" d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
       </svg>
     </button>
-    <div class="tab-group-color-indicator dot-${groupNode.color || 'blue'}" title="Change color"></div>
+    <div class="tab-group-color-indicator ${isGroupPreset ? `dot-${groupNode.color || 'blue'}` : 'dot-custom'}" title="Change color"></div>
     <span class="tab-group-title" title="Click or double-click to rename">${escapeHTML(groupNode.title)}</span>
     <span class="tab-group-count">${totalCount}</span>
     <div class="tab-group-actions">
@@ -1986,6 +2116,9 @@ function renderTabGroupNode(groupNode, level = 0) {
 
   // Color picker
   const colorIndicator = header.querySelector('.tab-group-color-indicator');
+  if (!isGroupPreset && groupNode.color && colorIndicator) {
+    colorIndicator.style.backgroundColor = groupNode.color;
+  }
   const colorBtn = header.querySelector('.tab-group-color-btn');
   const openColorPicker = (e) => {
     e.stopPropagation();
@@ -1997,23 +2130,16 @@ function renderTabGroupNode(groupNode, level = 0) {
     }
     document.querySelectorAll('.color-picker-popover').forEach(el => el.remove());
 
-    const popover = document.createElement('div');
-    popover.className = 'color-picker-popover tab-group-color-popover';
-    const colors = ['blue', 'purple', 'red', 'green', 'orange'];
-    colors.forEach(color => {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = `color-dot-btn btn-${color} ${groupNode.color === color ? 'active' : ''}`;
-      btn.title = color.charAt(0).toUpperCase() + color.slice(1);
-      btn.addEventListener('click', async (evt) => {
-        evt.stopPropagation();
+    const popover = createColorPickerPopover({
+      currentColor: groupNode.color,
+      extraClass: 'tab-group-color-popover',
+      onSelectColor: async (color) => {
         await DBService.updateGroupColor(groupNode.id, color);
         groupNode.color = color;
         popover.remove();
         showToast(`Group color updated to ${color}`);
         render();
-      });
-      popover.appendChild(btn);
+      }
     });
     actions.appendChild(popover);
   };
@@ -3535,7 +3661,8 @@ function renderSearchResults(matchingCols, groupedItems, allCollections, query, 
     
     matchingCols.forEach(col => {
       const card = document.createElement('div');
-      card.className = `collection-card col-color-${col.color || 'blue'}`;
+      card.className = 'collection-card';
+      applyCollectionTheme(card, col.color);
       card.dataset.id = col.id;
       card.innerHTML = `
         <div class="collection-card-left">
@@ -3579,7 +3706,8 @@ function renderSearchResults(matchingCols, groupedItems, allCollections, query, 
       if (!col) continue;
       
       const groupEl = document.createElement('div');
-      groupEl.className = `search-group col-color-${col.color || 'blue'}`;
+      groupEl.className = 'search-group';
+      applyCollectionTheme(groupEl, col.color);
       
       const headerEl = document.createElement('div');
       headerEl.className = 'search-group-header';
@@ -3907,8 +4035,9 @@ async function handleBulkMove() {
       const grpEl = document.createElement('div');
       grpEl.className = 'move-group-item';
       grpEl.dataset.level = level;
+      const isMovePreset = PRESET_COLORS.includes(grp.color);
       grpEl.innerHTML = `
-        <span class="move-group-dot dot-${grp.color || 'blue'}"></span>
+        <span class="move-group-dot ${isMovePreset ? `dot-${grp.color || 'blue'}` : 'dot-custom'}" ${!isMovePreset && grp.color ? `style="background-color: ${grp.color};"` : ''}></span>
         <span class="move-group-title">📁 ${escapeHTML(grp.title)}</span>
       `;
       grpEl.addEventListener('click', () => {
