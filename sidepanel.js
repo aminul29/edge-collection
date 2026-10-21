@@ -968,6 +968,29 @@ async function initApp() {
     const initialThumbSize = localStorage.getItem('collections_thumb_size_pref') || 'medium';
     updateThumbnailSizeUI(initialThumbSize);
 
+    // One-time announcement modal for the new adjustable thumbnail size feature
+    let featureNoticeDismissed = localStorage.getItem('feature-notice-thumb-size-dismissed') === 'true';
+    if (!featureNoticeDismissed && chrome.storage && chrome.storage.local) {
+      try {
+        const storageNotice = await chrome.storage.local.get(['feature_notice_thumb_size_dismissed']);
+        if (storageNotice && storageNotice.feature_notice_thumb_size_dismissed) {
+          featureNoticeDismissed = true;
+          localStorage.setItem('feature-notice-thumb-size-dismissed', 'true');
+        }
+      } catch (storageNoticeErr) {
+        // Ignore storage read error
+      }
+    }
+
+    if (!featureNoticeDismissed) {
+      const featureModal = document.getElementById('feature-announcement-modal');
+      if (featureModal) {
+        setTimeout(() => {
+          featureModal.classList.remove('hidden');
+        }, 400);
+      }
+    }
+
     await render();
 
     if (typeof SupabaseClient !== 'undefined' && SupabaseClient.isAuthenticated() && typeof SyncService !== 'undefined') {
@@ -1180,6 +1203,10 @@ function setupEventListeners() {
         if (viewOptionsPopover && !viewOptionsPopover.classList.contains('hidden')) {
           viewOptionsPopover.classList.add('hidden');
         }
+        const featureModal = document.getElementById('feature-announcement-modal');
+        if (featureModal && !featureModal.classList.contains('hidden')) {
+          dismissFeatureAnnouncementModal();
+        }
       }
     });
   }
@@ -1266,6 +1293,27 @@ function setupEventListeners() {
   const searchInput = document.getElementById('search-input');
   if (searchInput) {
     searchInput.addEventListener('input', handleSearch);
+  }
+
+  // Feature Announcement Modal controls
+  const featureModal = document.getElementById('feature-announcement-modal');
+  const closeFeatureModalBtn = document.getElementById('close-feature-modal-btn');
+  const dismissFeatureModalBtn = document.getElementById('dismiss-feature-modal-btn');
+
+  function dismissFeatureAnnouncementModal() {
+    if (featureModal) featureModal.classList.add('hidden');
+    localStorage.setItem('feature-notice-thumb-size-dismissed', 'true');
+    if (chrome.storage && chrome.storage.local) {
+      chrome.storage.local.set({ feature_notice_thumb_size_dismissed: true });
+    }
+  }
+
+  if (closeFeatureModalBtn) closeFeatureModalBtn.addEventListener('click', dismissFeatureAnnouncementModal);
+  if (dismissFeatureModalBtn) dismissFeatureModalBtn.addEventListener('click', dismissFeatureAnnouncementModal);
+  if (featureModal) {
+    featureModal.addEventListener('click', (e) => {
+      if (e.target === featureModal) dismissFeatureAnnouncementModal();
+    });
   }
 
   // Collection Details View Actions
