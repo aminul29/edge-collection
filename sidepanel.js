@@ -3951,10 +3951,10 @@ function getThumbnailSizePref() {
 
 function updateThumbnailSizeUI(size) {
   const container = document.getElementById('items-container');
-  const validSize = ['small', 'medium', 'large'].includes(size) ? size : 'medium';
+  const validSize = ['small', 'medium', 'large', 'xlarge'].includes(size) ? size : 'medium';
 
   if (container) {
-    container.classList.remove('thumb-size-small', 'thumb-size-medium', 'thumb-size-large');
+    container.classList.remove('thumb-size-small', 'thumb-size-medium', 'thumb-size-large', 'thumb-size-xlarge');
     container.classList.add(`thumb-size-${validSize}`);
   }
 
@@ -3965,7 +3965,7 @@ function updateThumbnailSizeUI(size) {
 }
 
 function setThumbnailSize(size) {
-  const validSize = ['small', 'medium', 'large'].includes(size) ? size : 'medium';
+  const validSize = ['small', 'medium', 'large', 'xlarge'].includes(size) ? size : 'medium';
   localStorage.setItem('collections_thumb_size_pref', validSize);
   if (chrome.storage && chrome.storage.local) {
     chrome.storage.local.set({ collections_thumb_size_pref: validSize });
