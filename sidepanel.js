@@ -954,6 +954,20 @@ async function initApp() {
       }
     }
 
+    // Initialize thumbnail size preference from chrome.storage or localStorage
+    if (chrome.storage && chrome.storage.local) {
+      try {
+        const syncRes = await chrome.storage.local.get(['collections_thumb_size_pref']);
+        if (syncRes && syncRes.collections_thumb_size_pref) {
+          localStorage.setItem('collections_thumb_size_pref', syncRes.collections_thumb_size_pref);
+        }
+      } catch (storageErr) {
+        console.warn("Could not read thumbnail size from storage:", storageErr);
+      }
+    }
+    const initialThumbSize = localStorage.getItem('collections_thumb_size_pref') || 'medium';
+    updateThumbnailSizeUI(initialThumbSize);
+
     await render();
 
     if (typeof SupabaseClient !== 'undefined' && SupabaseClient.isAuthenticated() && typeof SyncService !== 'undefined') {
@@ -1025,6 +1039,24 @@ function setupEventListeners() {
   const toggleViewBtn = document.getElementById('toggle-view-btn');
   if (toggleViewBtn) {
     toggleViewBtn.addEventListener('click', handleToggleView);
+  }
+
+  const viewOptionsBtn = document.getElementById('view-options-btn');
+  if (viewOptionsBtn) {
+    viewOptionsBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleViewOptionsPopover();
+    });
+  }
+
+  const viewOptionsPopover = document.getElementById('view-options-popover');
+  if (viewOptionsPopover) {
+    viewOptionsPopover.addEventListener('click', (e) => {
+      const btn = e.target.closest('.thumb-size-btn');
+      if (btn && btn.dataset.size) {
+        setThumbnailSize(btn.dataset.size);
+      }
+    });
   }
   
   const selectItemsBtn = document.getElementById('select-items-btn');
@@ -1135,6 +1167,19 @@ function setupEventListeners() {
     document.addEventListener('click', (e) => {
       if (!dropdownMenu.classList.contains('hidden') && !e.target.closest('#more-actions-menu') && !e.target.closest('#menu-trigger-btn')) {
         dropdownMenu.classList.add('hidden');
+      }
+      const viewOptionsPopover = document.getElementById('view-options-popover');
+      if (viewOptionsPopover && !viewOptionsPopover.classList.contains('hidden') && !e.target.closest('#view-options-popover') && !e.target.closest('#view-options-btn')) {
+        viewOptionsPopover.classList.add('hidden');
+      }
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        const viewOptionsPopover = document.getElementById('view-options-popover');
+        if (viewOptionsPopover && !viewOptionsPopover.classList.contains('hidden')) {
+          viewOptionsPopover.classList.add('hidden');
+        }
       }
     });
   }
@@ -1710,6 +1755,10 @@ async function renderCollectionDetails() {
   // Apply Grid/List view preference layout class
   const pref = localStorage.getItem('collections_view_pref') || 'grid';
   updateViewPrefUI(pref);
+
+  // Apply Thumbnail size preference
+  const thumbSize = localStorage.getItem('collections_thumb_size_pref') || 'medium';
+  updateThumbnailSizeUI(thumbSize);
   
   // Update select buttons visibility
   const selectItemsBtn = document.getElementById('select-items-btn');
@@ -3844,6 +3893,64 @@ function updateViewPrefUI(pref) {
     container.classList.remove('grid-view');
     icon.innerHTML = '<path d="M4 11h5V5H4v6zm0 7h5v-6H4v6zm6 0h5v-6h-5v6zm6 0h5v-6h-5v6zm-6-7h5V5h-5v6zm6-6v6h5V5h-5z"/>';
     icon.parentElement.title = "Switch to Grid View";
+  }
+}
+
+// --- Thumbnail Size Handlers ---
+function getThumbnailSizePref() {
+  return localStorage.getItem('collections_thumb_size_pref') || 'medium';
+}
+
+function updateThumbnailSizeUI(size) {
+  const container = document.getElementById('items-container');
+  const validSize = ['small', 'medium', 'large'].includes(size) ? size : 'medium';
+
+  if (container) {
+    container.classList.remove('thumb-size-small', 'thumb-size-medium', 'thumb-size-large');
+    container.classList.add(`thumb-size-${validSize}`);
+  }
+
+  // Update active state in popover buttons
+  document.querySelectorAll('.thumb-size-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.size === validSize);
+  });
+}
+
+function setThumbnailSize(size) {
+  const validSize = ['small', 'medium', 'large'].includes(size) ? size : 'medium';
+  localStorage.setItem('collections_thumb_size_pref', validSize);
+  if (chrome.storage && chrome.storage.local) {
+    chrome.storage.local.set({ collections_thumb_size_pref: validSize });
+  }
+
+  // If currently in list view, auto-switch to grid view so user sees thumbnail size change
+  const currentPref = localStorage.getItem('collections_view_pref') || 'grid';
+  if (currentPref !== 'grid') {
+    localStorage.setItem('collections_view_pref', 'grid');
+    updateViewPrefUI('grid');
+  }
+
+  updateThumbnailSizeUI(validSize);
+}
+
+function toggleViewOptionsPopover(forceState) {
+  const popover = document.getElementById('view-options-popover');
+  if (!popover) return;
+  
+  if (typeof forceState === 'boolean') {
+    popover.classList.toggle('hidden', !forceState);
+  } else {
+    popover.classList.toggle('hidden');
+  }
+
+  if (!popover.classList.contains('hidden')) {
+    // Close other open menus/popovers
+    const moreMenu = document.getElementById('more-actions-menu');
+    if (moreMenu) moreMenu.classList.add('hidden');
+    document.querySelectorAll('.color-picker-popover').forEach(el => el.remove());
+    
+    // Refresh active state to current pref
+    updateThumbnailSizeUI(getThumbnailSizePref());
   }
 }
 
