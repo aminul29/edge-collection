@@ -90,7 +90,7 @@ const DBService = {
           count: counts[col.id] || 0
         }));
         
-        // Robust sort collections: custom sortOrder ascending, breaking ties and unranked by creation date descending
+        // Robust sort collections: custom sortOrder ascending, unranked items at top (newest first), breaking ties by creation date descending
         result.sort((a, b) => {
           const hasSortA = a.sortOrder !== undefined && a.sortOrder !== null && typeof a.sortOrder === 'number' && !isNaN(a.sortOrder);
           const hasSortB = b.sortOrder !== undefined && b.sortOrder !== null && typeof b.sortOrder === 'number' && !isNaN(b.sortOrder);
@@ -99,8 +99,8 @@ const DBService = {
             if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
             return (b.created || 0) - (a.created || 0);
           }
-          if (hasSortA && !hasSortB) return -1;
-          if (!hasSortA && hasSortB) return 1;
+          if (hasSortA && !hasSortB) return 1;
+          if (!hasSortA && hasSortB) return -1;
           return (b.created || 0) - (a.created || 0);
         });
         resolve(result);
@@ -118,22 +118,23 @@ const DBService = {
         const collections = await DBService.getAllCollections();
         const transaction = db.transaction(['collections'], 'readwrite');
         const store = transaction.objectStore('collections');
+        const now = Date.now();
         
-        // Shift existing collections to maintain continuous zero-indexed sortOrder
-        for (const col of collections) {
-          if (typeof col.sortOrder === 'number') {
-            col.sortOrder += 1;
-            const { count, ...colData } = col;
-            store.put(colData);
-          }
+        // Re-index all existing collections to maintain continuous sequential sortOrder starting from 1
+        for (let i = 0; i < collections.length; i++) {
+          const col = collections[i];
+          col.sortOrder = i + 1;
+          col.updated = now;
+          const { count, ...colData } = col;
+          store.put(colData);
         }
         
         const collection = {
           id: generateId(),
           name: name,
           sortOrder: 0,
-          created: Date.now(),
-          updated: Date.now()
+          created: now,
+          updated: now
         };
         
         const request = store.add(collection);
@@ -249,7 +250,7 @@ const DBService = {
       
       request.onsuccess = (e) => {
         const items = e.target.result || [];
-        // Robust sort items: custom sortOrder ascending, breaking ties and unranked by creation date descending
+        // Robust sort items: custom sortOrder ascending, unranked items at top (newest first), breaking ties by creation date descending
         items.sort((a, b) => {
           const hasSortA = a.sortOrder !== undefined && a.sortOrder !== null && typeof a.sortOrder === 'number' && !isNaN(a.sortOrder);
           const hasSortB = b.sortOrder !== undefined && b.sortOrder !== null && typeof b.sortOrder === 'number' && !isNaN(b.sortOrder);
@@ -258,8 +259,8 @@ const DBService = {
             if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
             return (b.created || 0) - (a.created || 0);
           }
-          if (hasSortA && !hasSortB) return -1;
-          if (!hasSortA && hasSortB) return 1;
+          if (hasSortA && !hasSortB) return 1;
+          if (!hasSortA && hasSortB) return -1;
           return (b.created || 0) - (a.created || 0);
         });
         resolve(items);
@@ -1939,8 +1940,8 @@ async function renderCollectionsList() {
         if (draggedType === 'collection' && draggedCollectionId !== col.id) {
           e.dataTransfer.dropEffect = 'move';
           const rect = card.getBoundingClientRect();
-          const draggedIdx = collectionsList.findIndex(c => c.id === draggedCollectionId);
-          const targetIdx = collectionsList.findIndex(c => c.id === col.id);
+          const draggedIdx = filteredCols.findIndex(c => c.id === draggedCollectionId);
+          const targetIdx = filteredCols.findIndex(c => c.id === col.id);
           
           let isBefore = (e.clientY - rect.top) < rect.height / 2;
           if (draggedIdx !== -1 && targetIdx !== -1) {
@@ -1976,11 +1977,11 @@ async function renderCollectionsList() {
         
         if (draggedType === 'collection' && draggedCollectionId && draggedCollectionId !== col.id) {
           await reorderCollections(draggedCollectionId, col.id, position);
-          render();
+          await render();
         } else if (draggedType === 'item' && draggedItemId) {
           await moveItemToCollection(draggedItemId, col.id);
           showToast(`Moved item to "${col.name}"`);
-          render();
+          await render();
         } else if (isExternalDrag(e)) {
           await handleExternalDrop(e, col.id);
         }
@@ -2003,26 +2004,36 @@ async function renderCollectionsList() {
         e.preventDefault();
         e.stopPropagation();
         dragEndTime = Date.now();
-        const collections = await DBService.getAllCollections();
-        if (collections.length > 0) {
-          const cards = Array.from(container.querySelectorAll('.collection-card:not(.dragging)'));
-          let targetColId = null;
-          let position = 'after';
-          for (const c of cards) {
-            const rect = c.getBoundingClientRect();
-            if (e.clientY <= rect.bottom + 5) {
-              targetColId = c.dataset.id;
-              position = e.clientY < (rect.top + rect.height / 2) ? 'before' : 'after';
-              break;
+        const cards = Array.from(container.querySelectorAll('.collection-card'));
+        if (cards.length > 0) {
+          const firstRect = cards[0].getBoundingClientRect();
+          const lastRect = cards[cards.length - 1].getBoundingClientRect();
+          
+          if (e.clientY <= firstRect.top + firstRect.height / 2) {
+            if (cards[0].dataset.id !== draggedCollectionId) {
+              await reorderCollections(draggedCollectionId, cards[0].dataset.id, 'before');
+              await render();
             }
-          }
-          if (!targetColId && cards.length > 0) {
-            targetColId = cards[cards.length - 1].dataset.id;
-            position = 'after';
-          }
-          if (targetColId && targetColId !== draggedCollectionId) {
-            await reorderCollections(draggedCollectionId, targetColId, position);
-            render();
+          } else if (e.clientY >= lastRect.bottom) {
+            if (cards[cards.length - 1].dataset.id !== draggedCollectionId) {
+              await reorderCollections(draggedCollectionId, cards[cards.length - 1].dataset.id, 'after');
+              await render();
+            }
+          } else {
+            for (let i = 0; i < cards.length - 1; i++) {
+              const r1 = cards[i].getBoundingClientRect();
+              const r2 = cards[i + 1].getBoundingClientRect();
+              if (e.clientY >= r1.bottom && e.clientY <= r2.top) {
+                const prevId = cards[i].dataset.id;
+                const nextId = cards[i + 1].dataset.id;
+                if (prevId === draggedCollectionId || nextId === draggedCollectionId) {
+                  break;
+                }
+                await reorderCollections(draggedCollectionId, prevId, 'after');
+                await render();
+                break;
+              }
+            }
           }
         }
         return;

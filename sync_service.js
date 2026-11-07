@@ -394,13 +394,24 @@ const SyncService = {
         if (Array.isArray(upsertRes)) {
           for (const updatedCol of upsertRes) {
             if (updatedCol && updatedCol.id) {
-              const local = localColMap.get(updatedCol.id);
-              if (local) {
-                local.updated = new Date(updatedCol.updated_at || updatedCol.created_at).getTime();
-                if (updatedCol.sort_order !== undefined && updatedCol.sort_order !== null && !isNaN(Number(updatedCol.sort_order))) {
-                  local.sortOrder = Number(updatedCol.sort_order);
+              const currentLocal = await new Promise(r => {
+                if (typeof db === 'undefined' || !db) return r(null);
+                try {
+                  const tx = db.transaction(['collections'], 'readonly');
+                  const req = tx.objectStore('collections').get(updatedCol.id);
+                  req.onsuccess = () => r(req.result || null);
+                  req.onerror = () => r(null);
+                } catch (e) {
+                  r(null);
                 }
-                const { count, ...colToSave } = local;
+              }) || localColMap.get(updatedCol.id);
+
+              if (currentLocal) {
+                currentLocal.updated = new Date(updatedCol.updated_at || updatedCol.created_at).getTime();
+                if (updatedCol.sort_order !== undefined && updatedCol.sort_order !== null && !isNaN(Number(updatedCol.sort_order))) {
+                  currentLocal.sortOrder = Number(updatedCol.sort_order);
+                }
+                const { count, ...colToSave } = currentLocal;
                 await this._directLocalPutCollection(colToSave);
               }
             }
@@ -413,13 +424,24 @@ const SyncService = {
         if (Array.isArray(upsertRes)) {
           for (const updatedItem of upsertRes) {
             if (updatedItem && updatedItem.id) {
-              const local = localItemMap.get(updatedItem.id);
-              if (local) {
-                local.updated = new Date(updatedItem.updated_at || updatedItem.created_at).getTime();
-                if (updatedItem.sort_order !== undefined && updatedItem.sort_order !== null && !isNaN(Number(updatedItem.sort_order))) {
-                  local.sortOrder = Number(updatedItem.sort_order);
+              const currentLocal = await new Promise(r => {
+                if (typeof db === 'undefined' || !db) return r(null);
+                try {
+                  const tx = db.transaction(['items'], 'readonly');
+                  const req = tx.objectStore('items').get(updatedItem.id);
+                  req.onsuccess = () => r(req.result || null);
+                  req.onerror = () => r(null);
+                } catch (e) {
+                  r(null);
                 }
-                await this._directLocalPutItem(local);
+              }) || localItemMap.get(updatedItem.id);
+
+              if (currentLocal) {
+                currentLocal.updated = new Date(updatedItem.updated_at || updatedItem.created_at).getTime();
+                if (updatedItem.sort_order !== undefined && updatedItem.sort_order !== null && !isNaN(Number(updatedItem.sort_order))) {
+                  currentLocal.sortOrder = Number(updatedItem.sort_order);
+                }
+                await this._directLocalPutItem(currentLocal);
               }
             }
           }

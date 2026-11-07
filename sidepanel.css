@@ -515,6 +515,7 @@ body {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   cursor: pointer;
+  user-select: none;
   transition: all var(--transition-fast);
   box-shadow: var(--shadow-sm);
   position: relative;
