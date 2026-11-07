@@ -9,6 +9,7 @@ let draggedCollectionId = null;
 let draggedItemId = null;
 let draggedGroupId = null;
 let draggedType = null; // 'collection', 'item', or 'group'
+let dragEndTime = 0;
 let backDragTimeout = null;
 
 let selectionModeActive = false;
@@ -856,8 +857,99 @@ const DBService = {
   }
 };
 
+// --- External Browser Tab & URL Drag Helpers ---
+function isExternalDrag(e) {
+  if (draggedType) return false;
+  if (!e.dataTransfer) return false;
+  const types = Array.from(e.dataTransfer.types || []);
+  return types.includes('text/uri-list') || types.includes('text/plain') || types.includes('text/html');
+}
+
+function isValidWebUrl(url) {
+  if (!url || typeof url !== 'string') return false;
+  return url.startsWith('http://') || url.startsWith('https://') || url.startsWith('edge://') || url.startsWith('chrome://');
+}
+
+function extractUrlFromDataTransfer(dataTransfer) {
+  if (!dataTransfer) return null;
+  let uriList = dataTransfer.getData('text/uri-list');
+  if (uriList) {
+    const lines = uriList.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+    if (lines.length > 0 && isValidWebUrl(lines[0])) {
+      return lines[0];
+    }
+  }
+  let text = dataTransfer.getData('text/plain');
+  if (text) {
+    text = text.trim();
+    if (isValidWebUrl(text)) {
+      return text;
+    }
+  }
+  let html = dataTransfer.getData('text/html');
+  if (html) {
+    const match = html.match(/href=["']([^"']+)["']/i);
+    if (match && match[1] && isValidWebUrl(match[1])) {
+      return match[1];
+    }
+  }
+  return null;
+}
+
+async function handleExternalDrop(e, targetCollectionId, targetGroupId = null, position = null, targetItemId = null) {
+  const url = extractUrlFromDataTransfer(e.dataTransfer);
+  if (!url) {
+    showToast("Invalid link or tab dropped");
+    return;
+  }
+  
+  let tabTitle = "";
+  let favicon = "";
+  let thumbnail = "";
+  
+  if (typeof chrome !== 'undefined' && chrome.tabs && chrome.tabs.query) {
+    try {
+      const openTabs = await new Promise(resolve => chrome.tabs.query({}, resolve));
+      const cleanUrl = url.replace(/\/$/, '');
+      const matchedTab = openTabs.find(t => t.url && (t.url === url || t.url.replace(/\/$/, '') === cleanUrl));
+      if (matchedTab) {
+        tabTitle = matchedTab.title || "";
+        favicon = matchedTab.favIconUrl || "";
+      }
+    } catch (err) {
+      console.warn("Could not query browser tabs for drop:", err);
+    }
+  }
+  
+  if (!tabTitle) {
+    const html = e.dataTransfer.getData('text/html');
+    if (html) {
+      const textMatch = html.match(/<a[^>]*>(.*?)<\/a>/i);
+      if (textMatch && textMatch[1]) {
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = textMatch[1];
+        tabTitle = tempDiv.textContent.trim();
+      }
+    }
+    if (!tabTitle) {
+      const domain = getDomainName(url);
+      tabTitle = domain ? `Saved page (${domain})` : url;
+    }
+  }
+  
+  const cleanGroupId = (typeof targetGroupId === 'string' && targetGroupId.trim()) ? targetGroupId.trim() : null;
+  const newItem = await DBService.addItem(targetCollectionId, tabTitle, url, favicon, thumbnail, cleanGroupId);
+  
+  if (targetItemId && position) {
+    await reorderItems(targetCollectionId, newItem.id, targetItemId, position);
+  }
+  
+  showToast(`Added tab: "${tabTitle}"`);
+  render();
+}
+
 // --- Reordering and Move Operations ---
-async function reorderCollections(draggedId, targetId) {
+async function reorderCollections(draggedId, targetId, position = 'before') {
   if (!db) return;
   const collections = await DBService.getAllCollections();
   const draggedIdx = collections.findIndex(c => c.id === draggedId);
@@ -865,21 +957,30 @@ async function reorderCollections(draggedId, targetId) {
   if (draggedIdx === -1 || targetIdx === -1) return;
   
   const [draggedCol] = collections.splice(draggedIdx, 1);
-  collections.splice(targetIdx, 0, draggedCol);
+  const currentTargetIdx = collections.findIndex(c => c.id === targetId);
+  const insertIdx = (position === 'after') ? currentTargetIdx + 1 : currentTargetIdx;
+  collections.splice(insertIdx, 0, draggedCol);
   
-  const transaction = db.transaction(['collections'], 'readwrite');
-  const store = transaction.objectStore('collections');
-  const now = Date.now();
-  
-  for (let i = 0; i < collections.length; i++) {
-    collections[i].sortOrder = i;
-    collections[i].updated = now;
-    store.put(collections[i]);
-  }
-  if (typeof SyncService !== 'undefined') SyncService.scheduleSync();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['collections'], 'readwrite');
+    const store = transaction.objectStore('collections');
+    const now = Date.now();
+    
+    transaction.oncomplete = () => {
+      if (typeof SyncService !== 'undefined') SyncService.scheduleSync();
+      resolve();
+    };
+    transaction.onerror = (e) => reject(e.target.error);
+    
+    for (let i = 0; i < collections.length; i++) {
+      collections[i].sortOrder = i;
+      collections[i].updated = now;
+      store.put(collections[i]);
+    }
+  });
 }
 
-async function reorderItems(collectionId, draggedId, targetId) {
+async function reorderItems(collectionId, draggedId, targetId, position = 'before') {
   if (!db) return;
   const items = await DBService.getItems(collectionId);
   const draggedIdx = items.findIndex(i => i.id === draggedId);
@@ -893,18 +994,27 @@ async function reorderItems(collectionId, draggedId, targetId) {
     draggedItem.groupId = targetItem.type === 'group' ? targetItem.id : (targetItem.groupId || null);
   }
   
-  items.splice(targetIdx, 0, draggedItem);
+  const currentTargetIdx = items.findIndex(i => i.id === targetId);
+  const insertIdx = (position === 'after') ? currentTargetIdx + 1 : currentTargetIdx;
+  items.splice(insertIdx, 0, draggedItem);
   
-  const transaction = db.transaction(['items'], 'readwrite');
-  const store = transaction.objectStore('items');
-  const now = Date.now();
-  
-  for (let i = 0; i < items.length; i++) {
-    items[i].sortOrder = i;
-    items[i].updated = now;
-    store.put(items[i]);
-  }
-  if (typeof SyncService !== 'undefined') SyncService.scheduleSync();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['items'], 'readwrite');
+    const store = transaction.objectStore('items');
+    const now = Date.now();
+    
+    transaction.oncomplete = () => {
+      if (typeof SyncService !== 'undefined') SyncService.scheduleSync();
+      resolve();
+    };
+    transaction.onerror = (e) => reject(e.target.error);
+    
+    for (let i = 0; i < items.length; i++) {
+      items[i].sortOrder = i;
+      items[i].updated = now;
+      store.put(items[i]);
+    }
+  });
 }
 
 async function moveItemToCollection(itemId, targetCollectionId) {
@@ -1690,6 +1800,11 @@ async function renderCollectionsList() {
       
       // Click to open collection
       card.addEventListener('click', (e) => {
+        if (Date.now() - dragEndTime < 300) {
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
         // Prevent opening if clicking shortcut delete, palette button, or popover
         if (e.target.closest('.delete-col-shortcut') || e.target.closest('.change-color-btn') || e.target.closest('.color-picker-popover')) return;
         setView('detail', col.id);
@@ -1747,48 +1862,95 @@ async function renderCollectionsList() {
       card.setAttribute('draggable', 'true');
       
       card.addEventListener('dragstart', (e) => {
+        if (e.target.closest('button, input')) {
+          e.preventDefault();
+          return;
+        }
         card.classList.add('dragging');
         draggedCollectionId = col.id;
         draggedType = 'collection';
         e.dataTransfer.effectAllowed = 'move';
+        try {
+          e.dataTransfer.setData('text/plain', col.id);
+          e.dataTransfer.setData('application/x-collection-id', col.id);
+        } catch (err) {}
       });
       
       card.addEventListener('dragend', () => {
         card.classList.remove('dragging');
         draggedCollectionId = null;
         draggedType = null;
-        document.querySelectorAll('.collection-card').forEach(el => el.classList.remove('drag-hover'));
+        dragEndTime = Date.now();
+        document.querySelectorAll('.collection-card, .item-card, .note-card').forEach(el => {
+          el.classList.remove('drag-hover', 'drag-insert-before', 'drag-insert-after');
+        });
       });
       
       card.addEventListener('dragover', (e) => {
         e.preventDefault();
         if (draggedType === 'collection' && draggedCollectionId !== col.id) {
-          card.classList.add('drag-hover');
-        } else if (draggedType === 'item') {
+          e.dataTransfer.dropEffect = 'move';
+          const rect = card.getBoundingClientRect();
+          const isBefore = (e.clientY - rect.top) < rect.height / 2;
+          card.classList.toggle('drag-insert-before', isBefore);
+          card.classList.toggle('drag-insert-after', !isBefore);
+          card.classList.remove('drag-hover');
+        } else if (draggedType === 'item' || isExternalDrag(e)) {
+          e.dataTransfer.dropEffect = 'move';
           card.classList.add('drag-hover');
         }
       });
       
-      card.addEventListener('dragleave', () => {
-        card.classList.remove('drag-hover');
+      card.addEventListener('dragleave', (e) => {
+        if (!card.contains(e.relatedTarget)) {
+          card.classList.remove('drag-hover', 'drag-insert-before', 'drag-insert-after');
+        }
       });
       
       card.addEventListener('drop', async (e) => {
         e.preventDefault();
-        card.classList.remove('drag-hover');
+        const isBefore = card.classList.contains('drag-insert-before');
+        const position = isBefore ? 'before' : 'after';
+        card.classList.remove('drag-hover', 'drag-insert-before', 'drag-insert-after');
+        dragEndTime = Date.now();
         
         if (draggedType === 'collection' && draggedCollectionId && draggedCollectionId !== col.id) {
-          await reorderCollections(draggedCollectionId, col.id);
+          await reorderCollections(draggedCollectionId, col.id, position);
           render();
         } else if (draggedType === 'item' && draggedItemId) {
           await moveItemToCollection(draggedItemId, col.id);
           showToast(`Moved item to "${col.name}"`);
           render();
+        } else if (isExternalDrag(e)) {
+          await handleExternalDrop(e, col.id);
         }
       });
       
       container.appendChild(card);
     });
+
+    container.ondragover = (e) => {
+      if (e.target.closest('.collection-card')) return;
+      if (isExternalDrag(e)) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+      }
+    };
+
+    container.ondrop = async (e) => {
+      if (e.target.closest('.collection-card')) return;
+      if (isExternalDrag(e)) {
+        e.preventDefault();
+        dragEndTime = Date.now();
+        const collections = await DBService.getAllCollections();
+        let targetColId = collections.length > 0 ? collections[0].id : null;
+        if (!targetColId) {
+          const newCol = await DBService.addCollection("My Collection");
+          targetColId = newCol.id;
+        }
+        await handleExternalDrop(e, targetColId);
+      }
+    };
   } catch (err) {
     console.error("Render collections error:", err);
   }
@@ -1905,6 +2067,24 @@ async function renderCollectionDetails() {
     // Clear list
     container.innerHTML = '';
     
+    emptyState.ondragover = (e) => {
+      if (isExternalDrag(e) || draggedType === 'item') {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+      }
+    };
+
+    emptyState.ondrop = async (e) => {
+      e.preventDefault();
+      dragEndTime = Date.now();
+      if (isExternalDrag(e)) {
+        await handleExternalDrop(e, activeCollectionId, null);
+      } else if (draggedType === 'item' && draggedItemId) {
+        await DBService.moveItemToGroup(draggedItemId, null);
+        render();
+      }
+    };
+
     if (activeCollectionItems.length === 0) {
       emptyState.classList.remove('hidden');
       container.classList.add('hidden');
@@ -2023,17 +2203,20 @@ async function renderCollectionDetails() {
       container.appendChild(ungrContainer);
     }
 
-    // Enable dropping directly on container or ungrouped header to un-group
+    // Enable dropping directly on container or ungrouped header to un-group or add tab
     container.ondragover = (e) => {
+      if (e.target.closest('.item-card, .note-card, .tab-group-wrapper')) return;
       e.preventDefault();
-      if (draggedType === 'item' || draggedType === 'group') {
+      if (draggedType === 'item' || draggedType === 'group' || isExternalDrag(e)) {
         e.dataTransfer.dropEffect = 'move';
       }
     };
 
     container.ondrop = async (e) => {
-      if (e.target === container || e.target.classList.contains('ungrouped-items-header') || e.target.closest('.ungrouped-items-header')) {
+      if (e.target.closest('.item-card, .note-card, .tab-group-wrapper')) return;
+      if (e.target === container || e.target.classList.contains('ungrouped-items-header') || e.target.closest('.ungrouped-items-header') || isExternalDrag(e)) {
         e.preventDefault();
+        dragEndTime = Date.now();
         if (draggedType === 'item' && draggedItemId) {
           await DBService.moveItemToGroup(draggedItemId, null);
           showToast("Moved to ungrouped");
@@ -2042,6 +2225,8 @@ async function renderCollectionDetails() {
           await DBService.moveGroupToParent(draggedGroupId, null);
           showToast("Moved to root");
           render();
+        } else if (isExternalDrag(e)) {
+          await handleExternalDrop(e, activeCollectionId, null);
         }
       }
     };
@@ -2281,27 +2466,41 @@ function renderTabGroupNode(groupNode, level = 0) {
 
   // Drag and Drop for Group Header
   header.addEventListener('dragstart', (e) => {
+    if (e.target.closest('button, input')) {
+      e.preventDefault();
+      return;
+    }
     e.stopPropagation();
     wrapper.classList.add('dragging');
     draggedGroupId = groupNode.id;
     draggedType = 'group';
     e.dataTransfer.effectAllowed = 'move';
+    try {
+      e.dataTransfer.setData('text/plain', groupNode.id);
+      e.dataTransfer.setData('application/x-group-id', groupNode.id);
+    } catch (err) {}
   });
 
   header.addEventListener('dragend', () => {
     wrapper.classList.remove('dragging');
     draggedGroupId = null;
     draggedType = null;
+    dragEndTime = Date.now();
     document.querySelectorAll('.tab-group-wrapper').forEach(el => el.classList.remove('group-drag-hover', 'group-drop-nested-hover'));
   });
 
   // Drag and drop target on group wrapper
   wrapper.addEventListener('dragover', (e) => {
+    if (e.target.closest('.item-card, .note-card')) {
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
-    if (draggedType === 'item') {
+    if (draggedType === 'item' || isExternalDrag(e)) {
+      e.dataTransfer.dropEffect = 'move';
       wrapper.classList.add('group-drag-hover');
     } else if (draggedType === 'group' && draggedGroupId !== groupNode.id) {
+      e.dataTransfer.dropEffect = 'move';
       wrapper.classList.add('group-drop-nested-hover');
     }
   });
@@ -2313,9 +2512,13 @@ function renderTabGroupNode(groupNode, level = 0) {
   });
 
   wrapper.addEventListener('drop', async (e) => {
+    if (e.target.closest('.item-card, .note-card')) {
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
     wrapper.classList.remove('group-drag-hover', 'group-drop-nested-hover');
+    dragEndTime = Date.now();
 
     if (draggedType === 'item' && draggedItemId) {
       await DBService.moveItemToGroup(draggedItemId, groupNode.id);
@@ -2329,6 +2532,8 @@ function renderTabGroupNode(groupNode, level = 0) {
       } catch (err) {
         showToast(err.message || "Cannot nest group.");
       }
+    } else if (isExternalDrag(e)) {
+      await handleExternalDrop(e, activeCollectionId, groupNode.id);
     }
   });
 
@@ -2398,6 +2603,11 @@ function createNoteCardElement(item) {
   const contentEl = card.querySelector('.note-content');
   
   card.addEventListener('click', (e) => {
+    if (Date.now() - dragEndTime < 300) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
     if (selectionModeActive) {
       e.preventDefault();
       e.stopPropagation();
@@ -2461,38 +2671,74 @@ function createNoteCardElement(item) {
   card.setAttribute('draggable', 'true');
   
   card.addEventListener('dragstart', (e) => {
+    if (e.target.closest('button, input, .note-color-picker') || document.activeElement === contentEl) {
+      e.preventDefault();
+      return;
+    }
     card.classList.add('dragging');
     draggedItemId = item.id;
     draggedType = 'item';
     e.dataTransfer.effectAllowed = 'move';
+    try {
+      e.dataTransfer.setData('text/plain', item.id);
+      e.dataTransfer.setData('application/x-item-id', item.id);
+    } catch (err) {}
   });
   
   card.addEventListener('dragend', () => {
     card.classList.remove('dragging');
     draggedItemId = null;
     draggedType = null;
-    document.querySelectorAll('.item-card, .note-card').forEach(el => el.classList.remove('drag-hover'));
+    dragEndTime = Date.now();
+    document.querySelectorAll('.item-card, .note-card, .collection-card').forEach(el => {
+      el.classList.remove('drag-hover', 'drag-insert-before', 'drag-insert-after');
+    });
   });
   
   card.addEventListener('dragover', (e) => {
     e.preventDefault();
-    if (draggedType === 'item' && draggedItemId !== item.id) {
-      card.classList.add('drag-hover');
+    e.stopPropagation();
+    
+    const isInternalItem = (draggedType === 'item' && draggedItemId !== item.id);
+    const isExternal = isExternalDrag(e);
+    
+    if (isInternalItem || isExternal) {
+      e.dataTransfer.dropEffect = 'move';
+      const rect = card.getBoundingClientRect();
+      const isGrid = card.closest('.grid-view') !== null;
+      let isBefore = false;
+      if (isGrid) {
+        isBefore = (e.clientX - rect.left) < rect.width / 2;
+      } else {
+        isBefore = (e.clientY - rect.top) < rect.height / 2;
+      }
+      
+      card.classList.toggle('drag-insert-before', isBefore);
+      card.classList.toggle('drag-insert-after', !isBefore);
+      card.classList.remove('drag-hover');
     }
   });
   
-  card.addEventListener('dragleave', () => {
-    card.classList.remove('drag-hover');
+  card.addEventListener('dragleave', (e) => {
+    if (!card.contains(e.relatedTarget)) {
+      card.classList.remove('drag-hover', 'drag-insert-before', 'drag-insert-after');
+    }
   });
   
   card.addEventListener('drop', async (e) => {
     e.preventDefault();
     e.stopPropagation();
-    card.classList.remove('drag-hover');
+    
+    const isBefore = card.classList.contains('drag-insert-before');
+    const position = isBefore ? 'before' : 'after';
+    card.classList.remove('drag-hover', 'drag-insert-before', 'drag-insert-after');
+    dragEndTime = Date.now();
     
     if (draggedType === 'item' && draggedItemId && draggedItemId !== item.id) {
-      await reorderItems(activeCollectionId, draggedItemId, item.id);
+      await reorderItems(activeCollectionId, draggedItemId, item.id, position);
       render();
+    } else if (isExternalDrag(e)) {
+      await handleExternalDrop(e, activeCollectionId, item.groupId || null, position, item.id);
     }
   });
   
@@ -2529,19 +2775,19 @@ function createLinkCardElement(item) {
   card.innerHTML = `
     ${checkboxHTML}
     <div class="item-thumbnail-container">
-      ${item.thumbnail ? `<img class="item-thumbnail" src="${escapeHTML(item.thumbnail)}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />` : ''}
+      ${item.thumbnail ? `<img class="item-thumbnail" draggable="false" src="${escapeHTML(item.thumbnail)}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />` : ''}
       <div class="thumbnail-fallback" style="${item.thumbnail ? 'display: none;' : ''}">
         <span>${fallbackChar}</span>
       </div>
     </div>
-    <img class="item-favicon" src="${faviconSrc}" alt="" style="display:none;" 
+    <img class="item-favicon" draggable="false" src="${faviconSrc}" alt="" style="display:none;" 
       onload="this.style.display='inline-block'; if(this.nextElementSibling) this.nextElementSibling.style.display='none';" 
       onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='inline-flex';" />
     <div class="item-favicon-fallback" style="display:inline-flex; width:16px; height:16px; align-items:center; justify-content:center; background:var(--primary-light); color:var(--primary-color); border-radius:2px; font-size:10px; font-weight:bold; margin-top:3px; flex-shrink:0;">
       ${domain ? domain[0].toUpperCase() : 'W'}
     </div>
     <div class="item-details">
-      <a class="item-title" href="${escapeHTML(item.url)}" target="_blank" title="${escapeHTML(item.title)}">${escapeHTML(item.title)}</a>
+      <a class="item-title" href="${escapeHTML(item.url)}" target="_blank" title="${escapeHTML(item.title)}" draggable="false">${escapeHTML(item.title)}</a>
       <div class="item-meta">
         <span class="item-domain">${escapeHTML(domain)}</span>
         <span>&bull;</span>
@@ -2576,6 +2822,11 @@ function createLinkCardElement(item) {
   `;
   
   card.addEventListener('click', (e) => {
+    if (Date.now() - dragEndTime < 300) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
     if (selectionModeActive) {
       e.preventDefault();
       e.stopPropagation();
@@ -2719,38 +2970,74 @@ function createLinkCardElement(item) {
   card.setAttribute('draggable', 'true');
   
   card.addEventListener('dragstart', (e) => {
+    if (e.target.closest('button, input, textarea, .item-theme-popover, .link-note-editor')) {
+      e.preventDefault();
+      return;
+    }
     card.classList.add('dragging');
     draggedItemId = item.id;
     draggedType = 'item';
     e.dataTransfer.effectAllowed = 'move';
+    try {
+      e.dataTransfer.setData('text/plain', item.id);
+      e.dataTransfer.setData('application/x-item-id', item.id);
+    } catch (err) {}
   });
   
   card.addEventListener('dragend', () => {
     card.classList.remove('dragging');
     draggedItemId = null;
     draggedType = null;
-    document.querySelectorAll('.item-card, .note-card').forEach(el => el.classList.remove('drag-hover'));
+    dragEndTime = Date.now();
+    document.querySelectorAll('.item-card, .note-card, .collection-card').forEach(el => {
+      el.classList.remove('drag-hover', 'drag-insert-before', 'drag-insert-after');
+    });
   });
   
   card.addEventListener('dragover', (e) => {
     e.preventDefault();
-    if (draggedType === 'item' && draggedItemId !== item.id) {
-      card.classList.add('drag-hover');
+    e.stopPropagation();
+    
+    const isInternalItem = (draggedType === 'item' && draggedItemId !== item.id);
+    const isExternal = isExternalDrag(e);
+    
+    if (isInternalItem || isExternal) {
+      e.dataTransfer.dropEffect = 'move';
+      const rect = card.getBoundingClientRect();
+      const isGrid = card.closest('.grid-view') !== null;
+      let isBefore = false;
+      if (isGrid) {
+        isBefore = (e.clientX - rect.left) < rect.width / 2;
+      } else {
+        isBefore = (e.clientY - rect.top) < rect.height / 2;
+      }
+      
+      card.classList.toggle('drag-insert-before', isBefore);
+      card.classList.toggle('drag-insert-after', !isBefore);
+      card.classList.remove('drag-hover');
     }
   });
   
-  card.addEventListener('dragleave', () => {
-    card.classList.remove('drag-hover');
+  card.addEventListener('dragleave', (e) => {
+    if (!card.contains(e.relatedTarget)) {
+      card.classList.remove('drag-hover', 'drag-insert-before', 'drag-insert-after');
+    }
   });
   
   card.addEventListener('drop', async (e) => {
     e.preventDefault();
     e.stopPropagation();
-    card.classList.remove('drag-hover');
+    
+    const isBefore = card.classList.contains('drag-insert-before');
+    const position = isBefore ? 'before' : 'after';
+    card.classList.remove('drag-hover', 'drag-insert-before', 'drag-insert-after');
+    dragEndTime = Date.now();
     
     if (draggedType === 'item' && draggedItemId && draggedItemId !== item.id) {
-      await reorderItems(activeCollectionId, draggedItemId, item.id);
+      await reorderItems(activeCollectionId, draggedItemId, item.id, position);
       render();
+    } else if (isExternalDrag(e)) {
+      await handleExternalDrop(e, activeCollectionId, item.groupId || null, position, item.id);
     }
   });
   

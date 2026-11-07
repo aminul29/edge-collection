@@ -1887,6 +1887,41 @@ body {
   background-color: var(--primary-light) !important;
 }
 
+/* Drag and Drop Insertion Line Indicators */
+.item-card,
+.note-card,
+.collection-card {
+  position: relative;
+  transition: transform var(--transition-fast) ease, box-shadow var(--transition-fast) ease;
+}
+
+.item-card.drag-insert-before,
+.note-card.drag-insert-before,
+.collection-card.drag-insert-before {
+  box-shadow: 0 -2px 0 0 var(--primary-color);
+}
+
+.item-card.drag-insert-after,
+.note-card.drag-insert-after,
+.collection-card.drag-insert-after {
+  box-shadow: 0 2px 0 0 var(--primary-color);
+}
+
+/* Grid view horizontal insertion lines */
+.items-list.grid-view .item-card.drag-insert-before,
+.items-list.grid-view .note-card.drag-insert-before,
+.tab-group-content.grid-view .item-card.drag-insert-before,
+.tab-group-content.grid-view .note-card.drag-insert-before {
+  box-shadow: -3px 0 0 0 var(--primary-color);
+}
+
+.items-list.grid-view .item-card.drag-insert-after,
+.items-list.grid-view .note-card.drag-insert-after,
+.tab-group-content.grid-view .item-card.drag-insert-after,
+.tab-group-content.grid-view .note-card.drag-insert-after {
+  box-shadow: 3px 0 0 0 var(--primary-color);
+}
+
 #back-button {
   transition: transform var(--transition-fast) ease, background-color var(--transition-fast) ease, color var(--transition-fast) ease;
 }
