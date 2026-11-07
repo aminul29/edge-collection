@@ -12,6 +12,27 @@ const SUPABASE_CONFIG = {
 const SupabaseClient = {
   _session: null,
   _refreshPromise: null,
+  _serverTimeOffset: 0,
+
+  getServerTimeOffset() {
+    return this._serverTimeOffset || 0;
+  },
+
+  getServerNow() {
+    return Date.now() + (this._serverTimeOffset || 0);
+  },
+
+  _updateServerTimeOffset(response) {
+    if (response && response.headers) {
+      const serverDateHeader = response.headers.get('date');
+      if (serverDateHeader) {
+        const serverEpoch = new Date(serverDateHeader).getTime();
+        if (!isNaN(serverEpoch)) {
+          this._serverTimeOffset = serverEpoch - Date.now();
+        }
+      }
+    }
+  },
 
   async init() {
     try {
@@ -247,6 +268,8 @@ const SupabaseClient = {
           headers: headers
         });
 
+        client._updateServerTimeOffset(response);
+
         if (!response.ok) {
           const errData = await response.json().catch(() => ({}));
           throw new Error(errData.message || `Failed to select from ${tableName} (Status: ${response.status})`);
@@ -274,8 +297,32 @@ const SupabaseClient = {
           body: JSON.stringify(records)
         });
 
+        client._updateServerTimeOffset(response);
+
         if (!response.ok) {
           const errData = await response.json().catch(() => ({}));
+          // Graceful fallback if cloud database table is missing sort_order column
+          if (errData && errData.message && errData.message.includes("'sort_order'")) {
+            console.warn(`Supabase table ${tableName} missing sort_order column. Retrying upsert without it.`);
+            const fallbackRecords = records.map(r => {
+              const { sort_order, ...rest } = r;
+              return rest;
+            });
+            const retryRes = await fetch(`${SUPABASE_CONFIG.url}/rest/v1/${tableName}?on_conflict=${encodeURIComponent(onConflict)}`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'apikey': SUPABASE_CONFIG.anonKey,
+                'Authorization': `Bearer ${session.access_token}`,
+                'Prefer': 'resolution=merge-duplicates,return=representation'
+              },
+              body: JSON.stringify(fallbackRecords)
+            });
+            client._updateServerTimeOffset(retryRes);
+            if (retryRes.ok) {
+              return await retryRes.json();
+            }
+          }
           throw new Error(errData.message || `Failed to upsert to ${tableName} (Status: ${response.status})`);
         }
 
@@ -299,6 +346,8 @@ const SupabaseClient = {
           body: JSON.stringify(updates)
         });
 
+        client._updateServerTimeOffset(response);
+
         if (!response.ok) {
           const errData = await response.json().catch(() => ({}));
           throw new Error(errData.message || `Failed to update ${tableName} (Status: ${response.status})`);
@@ -320,6 +369,8 @@ const SupabaseClient = {
             'Authorization': `Bearer ${session.access_token}`
           }
         });
+
+        client._updateServerTimeOffset(response);
 
         if (!response.ok) {
           const errData = await response.json().catch(() => ({}));

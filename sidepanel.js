@@ -118,13 +118,19 @@ const DBService = {
         const collections = await DBService.getAllCollections();
         const transaction = db.transaction(['collections'], 'readwrite');
         const store = transaction.objectStore('collections');
-        const now = Date.now();
+        
+        let maxExisting = 0;
+        for (const c of collections) {
+          if (c.updated && c.updated > maxExisting) maxExisting = c.updated;
+        }
+        const now = Math.max(Date.now(), maxExisting + 1);
         
         // Re-index all existing collections to maintain continuous sequential sortOrder starting from 1
         for (let i = 0; i < collections.length; i++) {
           const col = collections[i];
           col.sortOrder = i + 1;
           col.updated = now;
+          col._dirty = true;
           const { count, ...colData } = col;
           store.put(colData);
         }
@@ -134,7 +140,8 @@ const DBService = {
           name: name,
           sortOrder: 0,
           created: now,
-          updated: now
+          updated: now,
+          _dirty: true
         };
         
         const request = store.add(collection);
@@ -161,7 +168,8 @@ const DBService = {
         const col = getReq.result;
         if (!col) return reject(new Error("Collection not found"));
         col.name = newName;
-        col.updated = Date.now();
+        col.updated = Math.max(Date.now(), (col.updated || 0) + 1);
+        col._dirty = true;
         const updateReq = store.put(col);
         updateReq.onsuccess = () => {
           if (typeof SyncService !== 'undefined') SyncService.scheduleSync();
@@ -185,7 +193,8 @@ const DBService = {
         const col = getReq.result;
         if (!col) return reject(new Error("Collection not found"));
         col.color = color;
-        col.updated = Date.now();
+        col.updated = Math.max(Date.now(), (col.updated || 0) + 1);
+        col._dirty = true;
         const updateReq = store.put(col);
         updateReq.onsuccess = () => {
           if (typeof SyncService !== 'undefined') SyncService.scheduleSync();
@@ -302,7 +311,8 @@ const DBService = {
         itemTheme: "",
         type: "link",
         created: now,
-        updated: now
+        updated: now,
+        _dirty: true
       };
       
       const request = store.add(item);
@@ -326,7 +336,8 @@ const DBService = {
         const item = getReq.result;
         if (!item) return reject(new Error("Item not found"));
         item.thumbnail = thumbnail || "";
-        item.updated = Date.now();
+        item.updated = Math.max(Date.now(), (item.updated || 0) + 1);
+        item._dirty = true;
 
         const updateReq = store.put(item);
         updateReq.onsuccess = () => {
@@ -351,7 +362,8 @@ const DBService = {
         const item = getReq.result;
         if (!item) return reject(new Error("Link not found"));
         item.linkNote = linkNote || "";
-        item.updated = Date.now();
+        item.updated = Math.max(Date.now(), (item.updated || 0) + 1);
+        item._dirty = true;
 
         const updateReq = store.put(item);
         updateReq.onsuccess = () => {
@@ -376,7 +388,8 @@ const DBService = {
         const item = getReq.result;
         if (!item) return reject(new Error("Link not found"));
         item.itemTheme = itemTheme || "";
-        item.updated = Date.now();
+        item.updated = Math.max(Date.now(), (item.updated || 0) + 1);
+        item._dirty = true;
 
         const updateReq = store.put(item);
         updateReq.onsuccess = () => {
@@ -405,7 +418,8 @@ const DBService = {
         content: content || "",
         color: color || "yellow",
         created: now,
-        updated: now
+        updated: now,
+        _dirty: true
       };
       
       const request = store.add(item);
@@ -429,7 +443,8 @@ const DBService = {
         const item = getReq.result;
         if (!item) return reject(new Error("Note not found"));
         item.content = newContent;
-        item.updated = Date.now();
+        item.updated = Math.max(Date.now(), (item.updated || 0) + 1);
+        item._dirty = true;
         const updateReq = store.put(item);
         updateReq.onsuccess = () => {
           if (typeof SyncService !== 'undefined') SyncService.scheduleSync();
@@ -453,7 +468,8 @@ const DBService = {
         const item = getReq.result;
         if (!item) return reject(new Error("Note not found"));
         item.color = newColor;
-        item.updated = Date.now();
+        item.updated = Math.max(Date.now(), (item.updated || 0) + 1);
+        item._dirty = true;
         const updateReq = store.put(item);
         updateReq.onsuccess = () => {
           if (typeof SyncService !== 'undefined') SyncService.scheduleSync();
@@ -530,7 +546,8 @@ const DBService = {
         const group = getReq.result;
         if (!group) return reject(new Error("Group not found"));
         group.viewMode = newViewMode;
-        group.updated = Date.now();
+        group.updated = Math.max(Date.now(), (group.updated || 0) + 1);
+        group._dirty = true;
         const updateReq = store.put(group);
         updateReq.onsuccess = () => {
           if (typeof SyncService !== 'undefined') SyncService.scheduleSync();
@@ -554,7 +571,8 @@ const DBService = {
         const group = getReq.result;
         if (!group) return reject(new Error("Group not found"));
         group.title = newTitle;
-        group.updated = Date.now();
+        group.updated = Math.max(Date.now(), (group.updated || 0) + 1);
+        group._dirty = true;
         const updateReq = store.put(group);
         updateReq.onsuccess = () => {
           if (typeof SyncService !== 'undefined') SyncService.scheduleSync();
@@ -578,7 +596,8 @@ const DBService = {
         const group = getReq.result;
         if (!group) return reject(new Error("Group not found"));
         group.color = newColor;
-        group.updated = Date.now();
+        group.updated = Math.max(Date.now(), (group.updated || 0) + 1);
+        group._dirty = true;
         const updateReq = store.put(group);
         updateReq.onsuccess = () => {
           if (typeof SyncService !== 'undefined') SyncService.scheduleSync();
@@ -602,7 +621,8 @@ const DBService = {
         const group = getReq.result;
         if (!group) return reject(new Error("Group not found"));
         group.collapsed = collapsed !== undefined ? collapsed : !group.collapsed;
-        group.updated = Date.now();
+        group.updated = Math.max(Date.now(), (group.updated || 0) + 1);
+        group._dirty = true;
         const updateReq = store.put(group);
         updateReq.onsuccess = () => {
           if (typeof SyncService !== 'undefined') SyncService.scheduleSync();
@@ -655,11 +675,13 @@ const DBService = {
           allItems.forEach(i => {
             if (i.groupId === id) {
               i.groupId = parentId || null;
-              i.updated = Date.now();
+              i.updated = Math.max(Date.now(), (i.updated || 0) + 1);
+              i._dirty = true;
               store.put(i);
             } else if (i.type === 'group' && i.parentGroupId === id) {
               i.parentGroupId = parentId || null;
-              i.updated = Date.now();
+              i.updated = Math.max(Date.now(), (i.updated || 0) + 1);
+              i._dirty = true;
               store.put(i);
             }
           });
@@ -689,7 +711,8 @@ const DBService = {
         const item = getReq.result;
         if (!item) return reject(new Error("Item not found"));
         item.groupId = targetGroupId || null;
-        item.updated = Date.now();
+        item.updated = Math.max(Date.now(), (item.updated || 0) + 1);
+        item._dirty = true;
         delete item.sortOrder;
         const updateReq = store.put(item);
         updateReq.onsuccess = () => {
@@ -727,7 +750,8 @@ const DBService = {
           const group = getReq.result;
           if (!group) return reject(new Error("Group not found"));
           group.parentGroupId = targetParentGroupId || null;
-          group.updated = Date.now();
+          group.updated = Math.max(Date.now(), (group.updated || 0) + 1);
+          group._dirty = true;
           delete group.sortOrder;
           const updateReq = store.put(group);
           updateReq.onsuccess = () => {
@@ -1003,7 +1027,12 @@ async function reorderCollections(draggedId, targetId, position = 'before') {
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(['collections'], 'readwrite');
     const store = transaction.objectStore('collections');
-    const now = Date.now();
+    
+    let maxExisting = 0;
+    for (const c of collections) {
+      if (c.updated && c.updated > maxExisting) maxExisting = c.updated;
+    }
+    const now = Math.max(Date.now(), maxExisting + 1);
     
     transaction.oncomplete = () => {
       if (typeof SyncService !== 'undefined') SyncService.scheduleSync();
@@ -1014,6 +1043,7 @@ async function reorderCollections(draggedId, targetId, position = 'before') {
     for (let i = 0; i < collections.length; i++) {
       collections[i].sortOrder = i;
       collections[i].updated = now;
+      collections[i]._dirty = true;
       const { count, ...colData } = collections[i];
       store.put(colData);
     }
@@ -1049,7 +1079,12 @@ async function reorderItems(collectionId, draggedId, targetId, position = 'befor
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(['items'], 'readwrite');
     const store = transaction.objectStore('items');
-    const now = Date.now();
+    
+    let maxExisting = 0;
+    for (const item of items) {
+      if (item.updated && item.updated > maxExisting) maxExisting = item.updated;
+    }
+    const now = Math.max(Date.now(), maxExisting + 1);
     
     transaction.oncomplete = () => {
       if (typeof SyncService !== 'undefined') SyncService.scheduleSync();
@@ -1060,6 +1095,7 @@ async function reorderItems(collectionId, draggedId, targetId, position = 'befor
     for (let i = 0; i < items.length; i++) {
       items[i].sortOrder = i;
       items[i].updated = now;
+      items[i]._dirty = true;
       store.put(items[i]);
     }
   });
@@ -1077,7 +1113,8 @@ async function moveItemToCollection(itemId, targetCollectionId) {
       if (!item) return reject(new Error("Item not found"));
       
       item.collectionId = targetCollectionId;
-      item.updated = Date.now();
+      item.updated = Math.max(Date.now(), (item.updated || 0) + 1);
+      item._dirty = true;
       delete item.sortOrder; // falls back to newest inside the target collection
       
       const updateReq = store.put(item);
@@ -4552,11 +4589,14 @@ async function handleBulkMove() {
         if (item && item.type !== 'group') {
           item.collectionId = targetColId;
           item.groupId = targetGroupId || null;
+          item.updated = Math.max(Date.now(), (item.updated || 0) + 1);
+          item._dirty = true;
           delete item.sortOrder;
           store.put(item);
         }
       }
       
+      if (typeof SyncService !== 'undefined') SyncService.scheduleSync();
       showToast(`Moved ${selectedItemIds.size} items to "${targetName}"`);
       document.getElementById('move-modal').classList.add('hidden');
       

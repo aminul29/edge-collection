@@ -161,7 +161,7 @@ const SyncService = {
    * Main delta synchronization algorithm.
    */
   async sync() {
-    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
       this._setStatus('offline', 'Internet connection offline');
       return { success: false, reason: 'offline' };
     }
@@ -239,6 +239,8 @@ const SyncService = {
       const itemsToUpsertCloud = [];
 
       // 4. Reconcile Collections
+      const offset = (typeof SupabaseClient !== 'undefined' && SupabaseClient.getServerTimeOffset) ? SupabaseClient.getServerTimeOffset() : 0;
+
       // A. Process cloud collections
       for (const cCol of cloudCollections) {
         const localCol = localColMap.get(cCol.id);
@@ -256,39 +258,23 @@ const SyncService = {
 
         if (!localCol) {
           // New in cloud -> insert locally
-          await this._directLocalPutCollection({
-            id: cCol.id,
-            name: cCol.name,
-            color: cCol.color || 'blue',
-            sortOrder: (cCol.sort_order !== undefined && cCol.sort_order !== null && !isNaN(Number(cCol.sort_order))) ? Number(cCol.sort_order) : 0,
-            created: new Date(cCol.created_at).getTime(),
-            updated: cloudUpdated
-          });
+          await this._directLocalPutCollection(this._mapCloudToLocalCollection(cCol, null));
           localChanged = true;
         } else {
           const localUpdated = localCol.updated || localCol.created || 0;
-          if (cloudUpdated > localUpdated) {
-            // Cloud is newer -> update local
-            await this._directLocalPutCollection({
-              ...localCol,
-              name: cCol.name,
-              color: cCol.color || 'blue',
-              sortOrder: (cCol.sort_order !== undefined && cCol.sort_order !== null && !isNaN(Number(cCol.sort_order)))
-                ? Number(cCol.sort_order)
-                : (localCol.sortOrder !== undefined && localCol.sortOrder !== null && !isNaN(Number(localCol.sortOrder)) ? Number(localCol.sortOrder) : 0),
-              updated: cloudUpdated
-            });
+          const isLocalDirty = !!localCol._dirty;
+          const normalizedCloudUpdated = cloudUpdated - offset;
+
+          if (isLocalDirty) {
+            // Local has pending un-synced changes -> push to cloud
+            collectionsToUpsertCloud.push(this._mapLocalCollectionToCloud(localCol, user.id));
+          } else if (normalizedCloudUpdated > localUpdated) {
+            // Cloud is genuinely newer -> update local
+            await this._directLocalPutCollection(this._mapCloudToLocalCollection(cCol, localCol));
             localChanged = true;
-          } else if (localUpdated > cloudUpdated) {
+          } else if (localUpdated > normalizedCloudUpdated) {
             // Local is newer -> push to cloud
-            collectionsToUpsertCloud.push({
-              id: localCol.id,
-              user_id: user.id,
-              name: localCol.name,
-              color: localCol.color || 'blue',
-              sort_order: (localCol.sortOrder !== undefined && localCol.sortOrder !== null && !isNaN(Number(localCol.sortOrder))) ? Number(localCol.sortOrder) : 0,
-              updated_at: new Date(localUpdated).toISOString()
-            });
+            collectionsToUpsertCloud.push(this._mapLocalCollectionToCloud(localCol, user.id));
           }
         }
       }
@@ -296,16 +282,7 @@ const SyncService = {
       // B. Process local collections not present in cloud
       for (const lCol of localCollections) {
         if (!cloudColMap.has(lCol.id)) {
-          const lUpdated = lCol.updated || lCol.created || Date.now();
-          collectionsToUpsertCloud.push({
-            id: lCol.id,
-            user_id: user.id,
-            name: lCol.name,
-            color: lCol.color || 'blue',
-            sort_order: (lCol.sortOrder !== undefined && lCol.sortOrder !== null && !isNaN(Number(lCol.sortOrder))) ? Number(lCol.sortOrder) : 0,
-            created_at: new Date(lCol.created || Date.now()).toISOString(),
-            updated_at: new Date(lUpdated).toISOString()
-          });
+          collectionsToUpsertCloud.push(this._mapLocalCollectionToCloud(lCol, user.id));
         }
       }
 
@@ -327,54 +304,21 @@ const SyncService = {
 
         if (!localItem) {
           // New in cloud -> insert locally
-          const newLocalItem = {
-            id: cItem.id,
-            collectionId: cItem.collection_id,
-            type: cItem.type,
-            title: cItem.title || '',
-            url: cItem.url || '',
-            thumbnail: cItem.thumbnail || '',
-            linkNote: cItem.link_note || '',
-            itemTheme: cItem.item_theme || '',
-            content: cItem.content || '',
-            color: cItem.item_theme || 'yellow',
-            parentGroupId: cItem.parent_group_id || null,
-            groupId: cItem.parent_group_id || null,
-            collapsed: !!cItem.collapsed,
-            viewMode: cItem.view_mode || 'list',
-            sortOrder: (cItem.sort_order !== undefined && cItem.sort_order !== null && !isNaN(Number(cItem.sort_order))) ? Number(cItem.sort_order) : 0,
-            created: new Date(cItem.created_at).getTime(),
-            updated: cloudUpdated
-          };
-          await this._directLocalPutItem(newLocalItem);
+          await this._directLocalPutItem(this._mapCloudToLocalItem(cItem, null));
           localChanged = true;
         } else {
           const localUpdated = localItem.updated || localItem.created || 0;
-          if (cloudUpdated > localUpdated) {
-            // Cloud is newer -> update local
-            const updatedLocalItem = {
-              ...localItem,
-              collectionId: cItem.collection_id,
-              type: cItem.type,
-              title: cItem.title || '',
-              url: cItem.url || '',
-              thumbnail: cItem.thumbnail || '',
-              linkNote: cItem.link_note || '',
-              itemTheme: cItem.item_theme || '',
-              content: cItem.content || '',
-              color: cItem.item_theme || localItem.color || 'yellow',
-              parentGroupId: cItem.parent_group_id || null,
-              groupId: cItem.parent_group_id || null,
-              collapsed: !!cItem.collapsed,
-              viewMode: cItem.view_mode || 'list',
-              sortOrder: (cItem.sort_order !== undefined && cItem.sort_order !== null && !isNaN(Number(cItem.sort_order)))
-                ? Number(cItem.sort_order)
-                : (localItem.sortOrder !== undefined && localItem.sortOrder !== null && !isNaN(Number(localItem.sortOrder)) ? Number(localItem.sortOrder) : 0),
-              updated: cloudUpdated
-            };
-            await this._directLocalPutItem(updatedLocalItem);
+          const isLocalDirty = !!localItem._dirty;
+          const normalizedCloudUpdated = cloudUpdated - offset;
+
+          if (isLocalDirty) {
+            // Local has pending un-synced changes -> push to cloud
+            itemsToUpsertCloud.push(this._mapLocalItemToCloud(localItem, user.id));
+          } else if (normalizedCloudUpdated > localUpdated) {
+            // Cloud is genuinely newer -> update local
+            await this._directLocalPutItem(this._mapCloudToLocalItem(cItem, localItem));
             localChanged = true;
-          } else if (localUpdated > cloudUpdated) {
+          } else if (localUpdated > normalizedCloudUpdated) {
             // Local is newer -> push to cloud
             itemsToUpsertCloud.push(this._mapLocalItemToCloud(localItem, user.id));
           }
@@ -390,25 +334,22 @@ const SyncService = {
 
       // 6. Push local pending changes to Supabase
       if (collectionsToUpsertCloud.length > 0) {
+        const sentTimestamps = new Map(collectionsToUpsertCloud.map(c => [c.id, new Date(c.updated_at).getTime()]));
         const upsertRes = await SupabaseClient.from('collections').upsert(collectionsToUpsertCloud);
         if (Array.isArray(upsertRes)) {
           for (const updatedCol of upsertRes) {
             if (updatedCol && updatedCol.id) {
-              const currentLocal = await new Promise(r => {
-                if (typeof db === 'undefined' || !db) return r(null);
-                try {
-                  const tx = db.transaction(['collections'], 'readonly');
-                  const req = tx.objectStore('collections').get(updatedCol.id);
-                  req.onsuccess = () => r(req.result || null);
-                  req.onerror = () => r(null);
-                } catch (e) {
-                  r(null);
-                }
-              }) || localColMap.get(updatedCol.id);
-
+              const currentLocal = (await this._getLocalCollection(updatedCol.id)) || localColMap.get(updatedCol.id);
               if (currentLocal) {
-                currentLocal.updated = new Date(updatedCol.updated_at || updatedCol.created_at).getTime();
-                if (updatedCol.sort_order !== undefined && updatedCol.sort_order !== null && !isNaN(Number(updatedCol.sort_order))) {
+                const sentTime = sentTimestamps.get(updatedCol.id) || 0;
+                // Only clear dirty flag and update timestamp if user hasn't made another edit while upsert was in flight
+                if ((currentLocal.updated || 0) <= sentTime) {
+                  currentLocal.updated = new Date(updatedCol.updated_at || updatedCol.created_at).getTime();
+                  currentLocal._dirty = false;
+                }
+                // Never overwrite valid local sortOrder with cloud's sort_order
+                if ((currentLocal.sortOrder === undefined || currentLocal.sortOrder === null) &&
+                    updatedCol.sort_order !== undefined && updatedCol.sort_order !== null && !isNaN(Number(updatedCol.sort_order))) {
                   currentLocal.sortOrder = Number(updatedCol.sort_order);
                 }
                 const { count, ...colToSave } = currentLocal;
@@ -420,25 +361,20 @@ const SyncService = {
       }
 
       if (itemsToUpsertCloud.length > 0) {
+        const sentTimestamps = new Map(itemsToUpsertCloud.map(i => [i.id, new Date(i.updated_at).getTime()]));
         const upsertRes = await SupabaseClient.from('items').upsert(itemsToUpsertCloud);
         if (Array.isArray(upsertRes)) {
           for (const updatedItem of upsertRes) {
             if (updatedItem && updatedItem.id) {
-              const currentLocal = await new Promise(r => {
-                if (typeof db === 'undefined' || !db) return r(null);
-                try {
-                  const tx = db.transaction(['items'], 'readonly');
-                  const req = tx.objectStore('items').get(updatedItem.id);
-                  req.onsuccess = () => r(req.result || null);
-                  req.onerror = () => r(null);
-                } catch (e) {
-                  r(null);
-                }
-              }) || localItemMap.get(updatedItem.id);
-
+              const currentLocal = (await this._getLocalItem(updatedItem.id)) || localItemMap.get(updatedItem.id);
               if (currentLocal) {
-                currentLocal.updated = new Date(updatedItem.updated_at || updatedItem.created_at).getTime();
-                if (updatedItem.sort_order !== undefined && updatedItem.sort_order !== null && !isNaN(Number(updatedItem.sort_order))) {
+                const sentTime = sentTimestamps.get(updatedItem.id) || 0;
+                if ((currentLocal.updated || 0) <= sentTime) {
+                  currentLocal.updated = new Date(updatedItem.updated_at || updatedItem.created_at).getTime();
+                  currentLocal._dirty = false;
+                }
+                if ((currentLocal.sortOrder === undefined || currentLocal.sortOrder === null) &&
+                    updatedItem.sort_order !== undefined && updatedItem.sort_order !== null && !isNaN(Number(updatedItem.sort_order))) {
                   currentLocal.sortOrder = Number(updatedItem.sort_order);
                 }
                 await this._directLocalPutItem(currentLocal);
@@ -479,6 +415,51 @@ const SyncService = {
     }
   },
 
+  _mapLocalCollectionToCloud(lCol, userId) {
+    const lUpdated = lCol.updated || lCol.created || Date.now();
+    return {
+      id: lCol.id,
+      user_id: userId,
+      name: lCol.name || 'Untitled Collection',
+      color: lCol.color || 'blue',
+      sort_order: (lCol.sortOrder !== undefined && lCol.sortOrder !== null && !isNaN(Number(lCol.sortOrder))) ? Number(lCol.sortOrder) : 0,
+      created_at: new Date(lCol.created || Date.now()).toISOString(),
+      updated_at: new Date(lUpdated).toISOString()
+    };
+  },
+
+  _mapCloudToLocalCollection(cCol, existingLocal = null) {
+    const cloudUpdated = new Date(cCol.updated_at || cCol.created_at).getTime();
+    
+    // Determine sortOrder:
+    // If local has a custom valid sort order and cloud has 0/null/undefined (unranked or default),
+    // preserve local sortOrder. If cloud has an explicit ranking, adopt it.
+    let sortOrder;
+    const hasCloudSort = (cCol.sort_order !== undefined && cCol.sort_order !== null && !isNaN(Number(cCol.sort_order)));
+    const hasLocalSort = existingLocal && (existingLocal.sortOrder !== undefined && existingLocal.sortOrder !== null && !isNaN(Number(existingLocal.sortOrder)));
+    
+    if (hasCloudSort && (Number(cCol.sort_order) > 0 || !hasLocalSort)) {
+      sortOrder = Number(cCol.sort_order);
+    } else if (hasLocalSort) {
+      sortOrder = Number(existingLocal.sortOrder);
+    } else if (hasCloudSort) {
+      sortOrder = Number(cCol.sort_order);
+    } else {
+      sortOrder = 0;
+    }
+
+    return {
+      ...(existingLocal || {}),
+      id: cCol.id,
+      name: cCol.name || (existingLocal && existingLocal.name) || 'Untitled Collection',
+      color: cCol.color || (existingLocal && existingLocal.color) || 'blue',
+      sortOrder: sortOrder,
+      created: existingLocal?.created || new Date(cCol.created_at).getTime(),
+      updated: cloudUpdated,
+      _dirty: false
+    };
+  },
+
   _mapLocalItemToCloud(lItem, userId) {
     const lUpdated = lItem.updated || lItem.created || Date.now();
     return {
@@ -499,6 +480,74 @@ const SyncService = {
       created_at: new Date(lItem.created || Date.now()).toISOString(),
       updated_at: new Date(lUpdated).toISOString()
     };
+  },
+
+  _mapCloudToLocalItem(cItem, existingLocal = null) {
+    const cloudUpdated = new Date(cItem.updated_at || cItem.created_at).getTime();
+    
+    let sortOrder;
+    const hasCloudSort = (cItem.sort_order !== undefined && cItem.sort_order !== null && !isNaN(Number(cItem.sort_order)));
+    const hasLocalSort = existingLocal && (existingLocal.sortOrder !== undefined && existingLocal.sortOrder !== null && !isNaN(Number(existingLocal.sortOrder)));
+    
+    if (hasCloudSort && (Number(cItem.sort_order) > 0 || !hasLocalSort)) {
+      sortOrder = Number(cItem.sort_order);
+    } else if (hasLocalSort) {
+      sortOrder = Number(existingLocal.sortOrder);
+    } else if (hasCloudSort) {
+      sortOrder = Number(cItem.sort_order);
+    } else {
+      sortOrder = 0;
+    }
+
+    return {
+      ...(existingLocal || {}),
+      id: cItem.id,
+      collectionId: cItem.collection_id,
+      type: cItem.type || 'link',
+      title: cItem.title || '',
+      url: cItem.url || '',
+      thumbnail: cItem.thumbnail || (existingLocal && existingLocal.thumbnail) || '',
+      linkNote: cItem.link_note || (existingLocal && existingLocal.linkNote) || '',
+      itemTheme: cItem.item_theme || (existingLocal && existingLocal.itemTheme) || '',
+      content: cItem.content || (existingLocal && existingLocal.content) || '',
+      color: cItem.item_theme || (existingLocal && existingLocal.color) || 'yellow',
+      parentGroupId: cItem.parent_group_id || null,
+      groupId: cItem.parent_group_id || null,
+      collapsed: !!cItem.collapsed,
+      viewMode: cItem.view_mode || 'list',
+      sortOrder: sortOrder,
+      created: existingLocal?.created || new Date(cItem.created_at).getTime(),
+      updated: cloudUpdated,
+      _dirty: false
+    };
+  },
+
+  _getLocalCollection(id) {
+    return new Promise(r => {
+      if (typeof db === 'undefined' || !db) return r(null);
+      try {
+        const tx = db.transaction(['collections'], 'readonly');
+        const req = tx.objectStore('collections').get(id);
+        req.onsuccess = () => r(req.result || null);
+        req.onerror = () => r(null);
+      } catch (e) {
+        r(null);
+      }
+    });
+  },
+
+  _getLocalItem(id) {
+    return new Promise(r => {
+      if (typeof db === 'undefined' || !db) return r(null);
+      try {
+        const tx = db.transaction(['items'], 'readonly');
+        const req = tx.objectStore('items').get(id);
+        req.onsuccess = () => r(req.result || null);
+        req.onerror = () => r(null);
+      } catch (e) {
+        r(null);
+      }
+    });
   },
 
   // Internal direct DB helpers that bypass tombstone recording

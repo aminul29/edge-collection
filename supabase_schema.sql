@@ -46,6 +46,10 @@ CREATE TABLE IF NOT EXISTS public.items (
     deleted_at TIMESTAMPTZ NULL
 );
 
+-- Idempotent column migrations for sort_order
+ALTER TABLE public.collections ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0;
+ALTER TABLE public.items ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0;
+
 -- Indexes for optimal sync query performance
 CREATE INDEX IF NOT EXISTS idx_collections_user_updated ON public.collections(user_id, updated_at);
 CREATE INDEX IF NOT EXISTS idx_collections_user_deleted ON public.collections(user_id, deleted_at);
