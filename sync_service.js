@@ -260,7 +260,7 @@ const SyncService = {
             id: cCol.id,
             name: cCol.name,
             color: cCol.color || 'blue',
-            sortOrder: cCol.sort_order !== undefined ? cCol.sort_order : 0,
+            sortOrder: (cCol.sort_order !== undefined && cCol.sort_order !== null && !isNaN(Number(cCol.sort_order))) ? Number(cCol.sort_order) : 0,
             created: new Date(cCol.created_at).getTime(),
             updated: cloudUpdated
           });
@@ -273,7 +273,9 @@ const SyncService = {
               ...localCol,
               name: cCol.name,
               color: cCol.color || 'blue',
-              sortOrder: cCol.sort_order !== undefined ? cCol.sort_order : localCol.sortOrder,
+              sortOrder: (cCol.sort_order !== undefined && cCol.sort_order !== null && !isNaN(Number(cCol.sort_order)))
+                ? Number(cCol.sort_order)
+                : (localCol.sortOrder !== undefined && localCol.sortOrder !== null && !isNaN(Number(localCol.sortOrder)) ? Number(localCol.sortOrder) : 0),
               updated: cloudUpdated
             });
             localChanged = true;
@@ -284,7 +286,7 @@ const SyncService = {
               user_id: user.id,
               name: localCol.name,
               color: localCol.color || 'blue',
-              sort_order: localCol.sortOrder !== undefined ? localCol.sortOrder : 0,
+              sort_order: (localCol.sortOrder !== undefined && localCol.sortOrder !== null && !isNaN(Number(localCol.sortOrder))) ? Number(localCol.sortOrder) : 0,
               updated_at: new Date(localUpdated).toISOString()
             });
           }
@@ -300,7 +302,7 @@ const SyncService = {
             user_id: user.id,
             name: lCol.name,
             color: lCol.color || 'blue',
-            sort_order: lCol.sortOrder !== undefined ? lCol.sortOrder : 0,
+            sort_order: (lCol.sortOrder !== undefined && lCol.sortOrder !== null && !isNaN(Number(lCol.sortOrder))) ? Number(lCol.sortOrder) : 0,
             created_at: new Date(lCol.created || Date.now()).toISOString(),
             updated_at: new Date(lUpdated).toISOString()
           });
@@ -340,7 +342,7 @@ const SyncService = {
             groupId: cItem.parent_group_id || null,
             collapsed: !!cItem.collapsed,
             viewMode: cItem.view_mode || 'list',
-            sortOrder: cItem.sort_order !== undefined ? cItem.sort_order : 0,
+            sortOrder: (cItem.sort_order !== undefined && cItem.sort_order !== null && !isNaN(Number(cItem.sort_order))) ? Number(cItem.sort_order) : 0,
             created: new Date(cItem.created_at).getTime(),
             updated: cloudUpdated
           };
@@ -365,7 +367,9 @@ const SyncService = {
               groupId: cItem.parent_group_id || null,
               collapsed: !!cItem.collapsed,
               viewMode: cItem.view_mode || 'list',
-              sortOrder: cItem.sort_order !== undefined ? cItem.sort_order : localItem.sortOrder,
+              sortOrder: (cItem.sort_order !== undefined && cItem.sort_order !== null && !isNaN(Number(cItem.sort_order)))
+                ? Number(cItem.sort_order)
+                : (localItem.sortOrder !== undefined && localItem.sortOrder !== null && !isNaN(Number(localItem.sortOrder)) ? Number(localItem.sortOrder) : 0),
               updated: cloudUpdated
             };
             await this._directLocalPutItem(updatedLocalItem);
@@ -386,11 +390,40 @@ const SyncService = {
 
       // 6. Push local pending changes to Supabase
       if (collectionsToUpsertCloud.length > 0) {
-        await SupabaseClient.from('collections').upsert(collectionsToUpsertCloud);
+        const upsertRes = await SupabaseClient.from('collections').upsert(collectionsToUpsertCloud);
+        if (Array.isArray(upsertRes)) {
+          for (const updatedCol of upsertRes) {
+            if (updatedCol && updatedCol.id) {
+              const local = localColMap.get(updatedCol.id);
+              if (local) {
+                local.updated = new Date(updatedCol.updated_at || updatedCol.created_at).getTime();
+                if (updatedCol.sort_order !== undefined && updatedCol.sort_order !== null && !isNaN(Number(updatedCol.sort_order))) {
+                  local.sortOrder = Number(updatedCol.sort_order);
+                }
+                const { count, ...colToSave } = local;
+                await this._directLocalPutCollection(colToSave);
+              }
+            }
+          }
+        }
       }
 
       if (itemsToUpsertCloud.length > 0) {
-        await SupabaseClient.from('items').upsert(itemsToUpsertCloud);
+        const upsertRes = await SupabaseClient.from('items').upsert(itemsToUpsertCloud);
+        if (Array.isArray(upsertRes)) {
+          for (const updatedItem of upsertRes) {
+            if (updatedItem && updatedItem.id) {
+              const local = localItemMap.get(updatedItem.id);
+              if (local) {
+                local.updated = new Date(updatedItem.updated_at || updatedItem.created_at).getTime();
+                if (updatedItem.sort_order !== undefined && updatedItem.sort_order !== null && !isNaN(Number(updatedItem.sort_order))) {
+                  local.sortOrder = Number(updatedItem.sort_order);
+                }
+                await this._directLocalPutItem(local);
+              }
+            }
+          }
+        }
       }
 
       // 7. Stamp last sync time
@@ -440,7 +473,7 @@ const SyncService = {
       parent_group_id: lItem.parentGroupId || lItem.groupId || null,
       collapsed: !!lItem.collapsed,
       view_mode: lItem.viewMode || 'list',
-      sort_order: lItem.sortOrder !== undefined ? lItem.sortOrder : 0,
+      sort_order: (lItem.sortOrder !== undefined && lItem.sortOrder !== null && !isNaN(Number(lItem.sortOrder))) ? Number(lItem.sortOrder) : 0,
       created_at: new Date(lItem.created || Date.now()).toISOString(),
       updated_at: new Date(lUpdated).toISOString()
     };
