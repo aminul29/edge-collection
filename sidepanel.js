@@ -298,7 +298,7 @@ const DBService = {
       const cleanGroupId = (typeof groupId === 'string' && groupId.trim()) ? groupId.trim() : null;
       const transaction = db.transaction(['items'], 'readwrite');
       const store = transaction.objectStore('items');
-      const now = Date.now();
+      const now = (typeof SupabaseClient !== 'undefined' && SupabaseClient.getServerNow) ? Math.max(Date.now(), SupabaseClient.getServerNow()) : Date.now();
       const item = {
         id: generateId(),
         collectionId: collectionId,
@@ -408,7 +408,7 @@ const DBService = {
       
       const transaction = db.transaction(['items'], 'readwrite');
       const store = transaction.objectStore('items');
-      const now = Date.now();
+      const now = (typeof SupabaseClient !== 'undefined' && SupabaseClient.getServerNow) ? Math.max(Date.now(), SupabaseClient.getServerNow()) : Date.now();
       const cleanGroupId = (typeof groupId === 'string' && groupId.trim()) ? groupId.trim() : null;
       const item = {
         id: generateId(),
@@ -511,7 +511,7 @@ const DBService = {
       
       const transaction = db.transaction(['items'], 'readwrite');
       const store = transaction.objectStore('items');
-      const now = Date.now();
+      const now = (typeof SupabaseClient !== 'undefined' && SupabaseClient.getServerNow) ? Math.max(Date.now(), SupabaseClient.getServerNow()) : Date.now();
       const group = {
         id: 'grp_' + generateId(),
         collectionId: collectionId,
@@ -522,7 +522,8 @@ const DBService = {
         collapsed: false,
         viewMode: viewMode || 'list',
         created: now,
-        updated: now
+        updated: now,
+        _dirty: true
       };
       
       const request = store.add(group);
@@ -781,12 +782,15 @@ const DBService = {
       transaction.onerror = (e) => reject(e.target.error);
       transaction.oncomplete = () => resolve({ collectionsImported, itemsImported });
       
+      const importNow = Date.now();
       collectionsData.forEach((group, index) => {
         const colId = generateId() + '_' + index;
         const collection = {
           id: colId,
           name: group.name,
-          created: Date.now() - (collectionsData.length - index) * 1000 // slightly spacing creation times
+          created: importNow - (collectionsData.length - index) * 1000, // slightly spacing creation times
+          updated: importNow,
+          _dirty: true
         };
         colStore.add(collection);
         collectionsImported++;
@@ -808,7 +812,9 @@ const DBService = {
             const itemStoreObj = {
               id: isGroup && item.id && groupIdMap[item.id] ? groupIdMap[item.id] : generateId() + '_' + index + '_' + itemIndex,
               collectionId: colId,
-              created: Date.now() - (group.items.length - itemIndex) * 10
+              created: importNow - (group.items.length - itemIndex) * 10,
+              updated: importNow,
+              _dirty: true
             };
             
             if (isGroup) {
@@ -2872,7 +2878,7 @@ function createNoteCardElement(item) {
     
     if (draggedType === 'item' && draggedItemId && draggedItemId !== item.id) {
       await reorderItems(activeCollectionId, draggedItemId, item.id, position);
-      render();
+      await render();
     } else if (isExternalDrag(e)) {
       await handleExternalDrop(e, activeCollectionId, item.groupId || null, position, item.id);
     }
@@ -3171,7 +3177,7 @@ function createLinkCardElement(item) {
     
     if (draggedType === 'item' && draggedItemId && draggedItemId !== item.id) {
       await reorderItems(activeCollectionId, draggedItemId, item.id, position);
-      render();
+      await render();
     } else if (isExternalDrag(e)) {
       await handleExternalDrop(e, activeCollectionId, item.groupId || null, position, item.id);
     }

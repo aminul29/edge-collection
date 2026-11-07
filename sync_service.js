@@ -239,7 +239,7 @@ const SyncService = {
       const itemsToUpsertCloud = [];
 
       // 4. Reconcile Collections
-      const offset = (typeof SupabaseClient !== 'undefined' && SupabaseClient.getServerTimeOffset) ? SupabaseClient.getServerTimeOffset() : 0;
+      const cloudHasCollectionRanks = cloudCollections.some(c => c.sort_order !== null && c.sort_order !== undefined && Number(c.sort_order) > 0);
 
       // A. Process cloud collections
       for (const cCol of cloudCollections) {
@@ -258,23 +258,19 @@ const SyncService = {
 
         if (!localCol) {
           // New in cloud -> insert locally
-          await this._directLocalPutCollection(this._mapCloudToLocalCollection(cCol, null));
+          await this._directLocalPutCollection(this._mapCloudToLocalCollection(cCol, null, cloudHasCollectionRanks));
           localChanged = true;
         } else {
           const localUpdated = localCol.updated || localCol.created || 0;
           const isLocalDirty = !!localCol._dirty;
-          const normalizedCloudUpdated = cloudUpdated - offset;
 
           if (isLocalDirty) {
             // Local has pending un-synced changes -> push to cloud
             collectionsToUpsertCloud.push(this._mapLocalCollectionToCloud(localCol, user.id));
-          } else if (normalizedCloudUpdated > localUpdated) {
-            // Cloud is genuinely newer -> update local
-            await this._directLocalPutCollection(this._mapCloudToLocalCollection(cCol, localCol));
+          } else if (cloudUpdated > localUpdated) {
+            // Cloud is genuinely newer than last sync -> update local
+            await this._directLocalPutCollection(this._mapCloudToLocalCollection(cCol, localCol, cloudHasCollectionRanks));
             localChanged = true;
-          } else if (localUpdated > normalizedCloudUpdated) {
-            // Local is newer -> push to cloud
-            collectionsToUpsertCloud.push(this._mapLocalCollectionToCloud(localCol, user.id));
           }
         }
       }
@@ -287,6 +283,14 @@ const SyncService = {
       }
 
       // 5. Reconcile Items
+      const cloudItemsByCol = new Map();
+      for (const ci of cloudItems) {
+        if (!cloudItemsByCol.has(ci.collection_id)) {
+          cloudItemsByCol.set(ci.collection_id, []);
+        }
+        cloudItemsByCol.get(ci.collection_id).push(ci);
+      }
+
       // A. Process cloud items
       for (const cItem of cloudItems) {
         const localItem = localItemMap.get(cItem.id);
@@ -301,26 +305,24 @@ const SyncService = {
         }
 
         const cloudUpdated = new Date(cItem.updated_at || cItem.created_at).getTime();
+        const siblingCloudItems = cloudItemsByCol.get(cItem.collection_id) || [];
+        const colHasRanks = siblingCloudItems.some(i => i.sort_order !== null && i.sort_order !== undefined && Number(i.sort_order) > 0);
 
         if (!localItem) {
           // New in cloud -> insert locally
-          await this._directLocalPutItem(this._mapCloudToLocalItem(cItem, null));
+          await this._directLocalPutItem(this._mapCloudToLocalItem(cItem, null, colHasRanks));
           localChanged = true;
         } else {
           const localUpdated = localItem.updated || localItem.created || 0;
           const isLocalDirty = !!localItem._dirty;
-          const normalizedCloudUpdated = cloudUpdated - offset;
 
           if (isLocalDirty) {
             // Local has pending un-synced changes -> push to cloud
             itemsToUpsertCloud.push(this._mapLocalItemToCloud(localItem, user.id));
-          } else if (normalizedCloudUpdated > localUpdated) {
-            // Cloud is genuinely newer -> update local
-            await this._directLocalPutItem(this._mapCloudToLocalItem(cItem, localItem));
+          } else if (cloudUpdated > localUpdated) {
+            // Cloud is genuinely newer than last sync -> update local
+            await this._directLocalPutItem(this._mapCloudToLocalItem(cItem, localItem, colHasRanks));
             localChanged = true;
-          } else if (localUpdated > normalizedCloudUpdated) {
-            // Local is newer -> push to cloud
-            itemsToUpsertCloud.push(this._mapLocalItemToCloud(localItem, user.id));
           }
         }
       }
@@ -422,23 +424,23 @@ const SyncService = {
       user_id: userId,
       name: lCol.name || 'Untitled Collection',
       color: lCol.color || 'blue',
-      sort_order: (lCol.sortOrder !== undefined && lCol.sortOrder !== null && !isNaN(Number(lCol.sortOrder))) ? Number(lCol.sortOrder) : 0,
+      sort_order: (lCol.sortOrder !== undefined && lCol.sortOrder !== null && !isNaN(Number(lCol.sortOrder))) ? Number(lCol.sortOrder) : null,
       created_at: new Date(lCol.created || Date.now()).toISOString(),
       updated_at: new Date(lUpdated).toISOString()
     };
   },
 
-  _mapCloudToLocalCollection(cCol, existingLocal = null) {
+  _mapCloudToLocalCollection(cCol, existingLocal = null, cloudHasRanks = true) {
     const cloudUpdated = new Date(cCol.updated_at || cCol.created_at).getTime();
     
     // Determine sortOrder:
-    // If local has a custom valid sort order and cloud has 0/null/undefined (unranked or default),
-    // preserve local sortOrder. If cloud has an explicit ranking, adopt it.
+    // If local has a custom valid sort order and cloud has null/undefined, or legacy all-zeros,
+    // preserve local sortOrder. If cloud has valid ranking data, adopt it (including rank 0).
     let sortOrder;
     const hasCloudSort = (cCol.sort_order !== undefined && cCol.sort_order !== null && !isNaN(Number(cCol.sort_order)));
     const hasLocalSort = existingLocal && (existingLocal.sortOrder !== undefined && existingLocal.sortOrder !== null && !isNaN(Number(existingLocal.sortOrder)));
     
-    if (hasCloudSort && (Number(cCol.sort_order) > 0 || !hasLocalSort)) {
+    if (hasCloudSort && (cloudHasRanks || Number(cCol.sort_order) > 0 || !hasLocalSort)) {
       sortOrder = Number(cCol.sort_order);
     } else if (hasLocalSort) {
       sortOrder = Number(existingLocal.sortOrder);
@@ -476,30 +478,30 @@ const SyncService = {
       parent_group_id: lItem.parentGroupId || lItem.groupId || null,
       collapsed: !!lItem.collapsed,
       view_mode: lItem.viewMode || 'list',
-      sort_order: (lItem.sortOrder !== undefined && lItem.sortOrder !== null && !isNaN(Number(lItem.sortOrder))) ? Number(lItem.sortOrder) : 0,
+      sort_order: (lItem.sortOrder !== undefined && lItem.sortOrder !== null && !isNaN(Number(lItem.sortOrder))) ? Number(lItem.sortOrder) : null,
       created_at: new Date(lItem.created || Date.now()).toISOString(),
       updated_at: new Date(lUpdated).toISOString()
     };
   },
 
-  _mapCloudToLocalItem(cItem, existingLocal = null) {
+  _mapCloudToLocalItem(cItem, existingLocal = null, cloudHasRanks = true) {
     const cloudUpdated = new Date(cItem.updated_at || cItem.created_at).getTime();
     
     let sortOrder;
     const hasCloudSort = (cItem.sort_order !== undefined && cItem.sort_order !== null && !isNaN(Number(cItem.sort_order)));
     const hasLocalSort = existingLocal && (existingLocal.sortOrder !== undefined && existingLocal.sortOrder !== null && !isNaN(Number(existingLocal.sortOrder)));
     
-    if (hasCloudSort && (Number(cItem.sort_order) > 0 || !hasLocalSort)) {
+    if (hasCloudSort && (cloudHasRanks || Number(cItem.sort_order) > 0 || !hasLocalSort)) {
       sortOrder = Number(cItem.sort_order);
     } else if (hasLocalSort) {
       sortOrder = Number(existingLocal.sortOrder);
     } else if (hasCloudSort) {
       sortOrder = Number(cItem.sort_order);
     } else {
-      sortOrder = 0;
+      sortOrder = undefined;
     }
 
-    return {
+    const localItem = {
       ...(existingLocal || {}),
       id: cItem.id,
       collectionId: cItem.collection_id,
@@ -515,11 +517,18 @@ const SyncService = {
       groupId: cItem.parent_group_id || null,
       collapsed: !!cItem.collapsed,
       viewMode: cItem.view_mode || 'list',
-      sortOrder: sortOrder,
       created: existingLocal?.created || new Date(cItem.created_at).getTime(),
       updated: cloudUpdated,
       _dirty: false
     };
+
+    if (sortOrder !== undefined) {
+      localItem.sortOrder = sortOrder;
+    } else {
+      delete localItem.sortOrder;
+    }
+
+    return localItem;
   },
 
   _getLocalCollection(id) {

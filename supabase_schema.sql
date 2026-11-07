@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS public.collections (
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     color TEXT DEFAULT 'blue',
-    sort_order INTEGER DEFAULT 0,
+    sort_order INTEGER,
     created_at TIMESTAMPTZ NOT NULL DEFAULT TIMEZONE('utc'::text, NOW()),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT TIMEZONE('utc'::text, NOW()),
     deleted_at TIMESTAMPTZ NULL
@@ -40,15 +40,15 @@ CREATE TABLE IF NOT EXISTS public.items (
     parent_group_id TEXT NULL,
     collapsed BOOLEAN DEFAULT FALSE,
     view_mode TEXT DEFAULT 'list', -- 'list' or 'grid'
-    sort_order INTEGER DEFAULT 0,
+    sort_order INTEGER,
     created_at TIMESTAMPTZ NOT NULL DEFAULT TIMEZONE('utc'::text, NOW()),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT TIMEZONE('utc'::text, NOW()),
     deleted_at TIMESTAMPTZ NULL
 );
 
 -- Idempotent column migrations for sort_order
-ALTER TABLE public.collections ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0;
-ALTER TABLE public.items ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0;
+ALTER TABLE public.collections ADD COLUMN IF NOT EXISTS sort_order INTEGER;
+ALTER TABLE public.items ADD COLUMN IF NOT EXISTS sort_order INTEGER;
 
 -- Indexes for optimal sync query performance
 CREATE INDEX IF NOT EXISTS idx_collections_user_updated ON public.collections(user_id, updated_at);
